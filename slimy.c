@@ -1,10 +1,37 @@
 #define _POSIX_C_SOURCE 200809L
+#include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
-#include <threads.h>
 #include <unistd.h>
+
+#if _WIN32
+#include <windows.h>
+// threads.h emulation
+enum {
+	thrd_success,
+	thrd_error,
+};
+typedef struct {HANDLE h;} thrd_t;
+static inline int thrd_create(thrd_t *thr, LPTHREAD_START_ROUTINE func, void *arg) {
+	thr->h = CreateThread(NULL, 0, func, arg, 0, NULL);
+	if (!thr->h) return thrd_error;
+	return thrd_success;
+}
+static inline int thrd_join(thrd_t thr, int *res) {
+	if (WaitForSingleObject(thr.h, INFINITE) != WAIT_OBJECT_0) return thrd_error;
+	if (res) {
+		DWORD dwres;
+		if (!GetExitCodeThread(thr.h, &dwres)) return thrd_error;
+		*res = dwres;
+	}
+	return thrd_success;
+}
+#else
+#include <threads.h>
+#endif
 
 struct chunkpos {
 	int x, z;
@@ -16,7 +43,7 @@ struct cluster {
 };
 
 struct searchparams {
-	long seed;
+	int64_t seed;
 	int range;
 	int threshold; // positive for above, negative for below
 
@@ -32,17 +59,17 @@ struct threadparams {
 	struct chunkpos start, end;
 };
 
-long lcg_init(long seed) {
-	return (seed ^ 0x5DEECE66DL) & ((1L << 48) - 1);
+uint64_t lcg_init(uint64_t seed) {
+	return (seed ^ 0x5DEECE66Dll) & ((1ll << 48) - 1);
 }
 
-int lcg_next(long *seed, int bits) {
-	*seed = (*seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
+int32_t lcg_next(uint64_t *seed, int32_t bits) {
+	*seed = (*seed * 0x5DEECE66Dll + 0xBll) & ((1ll << 48) - 1);
 	return *seed >> (48 - bits);
 }
 
-int lcg_next_int(long *seed, int max) {
-	int bits, val;
+int32_t lcg_next_int(uint64_t *seed, int32_t max) {
+	int32_t bits, val;
 	do {
 		bits = lcg_next(seed, 31);
 		val = bits % max;
@@ -50,7 +77,7 @@ int lcg_next_int(long *seed, int max) {
 	return val;
 }
 
-_Bool is_slimy(long seed, int x, int z) {
+_Bool is_slimy(uint64_t seed, int32_t x, int32_t z) {
 	seed +=
 		x * x * 4987142L +
 		x * 5947611L +
@@ -61,18 +88,17 @@ _Bool is_slimy(long seed, int x, int z) {
 	return !lcg_next_int(&seed, 10);
 }
 
-static inline int roundup_pow2(int n) {
+static inline int32_t roundup_pow2(int32_t n) {
 	n--;
-	for (int i = 0; i < 5; i++) {
+	for (int32_t i = 0; i < 5; i++) {
 		n |= n >> (1<<i);
 	}
 	n++;
 	return n;
 }
 
-#define INT_BIT (CHAR_BIT * sizeof (int))
-static int isqrt(int n) {
-	static int lut[72] = {
+static int32_t isqrt(int32_t n) {
+	static int32_t lut[72] = {
 		0, 1, 1, 1, 2, 2, 2, 2,
 		2, 3, 3, 3, 3, 3, 3, 3,
 		4, 4, 4, 4, 4, 4, 4, 4,
@@ -87,9 +113,9 @@ static int isqrt(int n) {
 
 	// LUT miss, fallback to Newton's method
 #ifdef __GNUC__
-	int x = 1 << ((__builtin_clz(n) ^ INT_BIT-1) / 2);
+	int32_t x = 1 << ((__builtin_clz(n) ^ 31) / 2);
 #else
-	int x = n;
+	int32_t x = n;
 #endif
 
 	for (;;) {
@@ -98,11 +124,16 @@ static int isqrt(int n) {
 	}
 }
 
-static inline _Bool check_threshold(int count, int thres) {
+static inline _Bool check_threshold(int32_t count, int32_t thres) {
 	return thres < 0 ? count <= -thres : count >= thres;
 }
 
-int search_strips(void *data) {
+#ifdef _WIN32
+DWORD WINAPI
+#else
+int
+#endif
+search_strips(void *data) {
 	struct threadparams *param = data;
 	int orad = param->common->outer_rad;
 	int orad2 = orad*orad;
@@ -114,11 +145,11 @@ int search_strips(void *data) {
 	_Bool buf[bufn * side]; // Ring buffer to store cached sliminess
 	unsigned bufp = 0; // Pointer in ring buf
 
-#define buf_wrap(zpos) ((zpos) & bufn-1)
+#define buf_wrap(zpos) ((zpos) & (bufn-1))
 #define buf_at(zpos, xpos) (buf[side*buf_wrap(bufp - orad + zpos) + orad + xpos])
 #define buf_at_p(xpos) (buf[side*bufp + orad + xpos])
 #define buf_loadrow(x, z) do { \
-		bufp = bufp+1 & bufn-1; \
+		bufp = (bufp+1) & (bufn-1); \
 		for (int k = -orad; k <= orad; k++) { \
 			buf_at_p(k) = is_slimy(param->common->seed, (x) + k, (z)); \
 		} \
@@ -176,7 +207,7 @@ int search_strips(void *data) {
 	return 0;
 }
 
-void begin_search(struct searchparams *param, int nthread) {
+int begin_search(struct searchparams *param, int nthread) {
 	int startx = -param->range, endx = param->range;
 	int startz = startx, endz = endx;
 	int xrange = 2*param->range;
@@ -195,12 +226,22 @@ void begin_search(struct searchparams *param, int nthread) {
 
 		threads[i].end = (struct chunkpos){posx, endz};
 
-		thrd_create(&threads[i].thr, search_strips, &threads[i]);
+		if (thrd_create(&threads[i].thr, search_strips, &threads[i]) != thrd_success) {
+			fprintf(stderr, "Error starting thread %d\n", i);
+			return 1;
+		}
 	}
 
 	for (int i = 0; i < nthread; i++) {
-		thrd_join(threads[i].thr, NULL);
+		if (thrd_join(threads[i].thr, NULL) != thrd_success) {
+			fprintf(stderr, "Error joining thread %d\n", i);
+		}
+#ifdef _WIN32
+		CloseHandle(threads[i].thr.h);
+#endif
 	}
+
+	return 0;
 }
 
 static void print_cb(struct cluster clus, void *data) {
@@ -211,8 +252,7 @@ static void print_cb(struct cluster clus, void *data) {
 static int nproc(void) {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
-#elif 0 && defined(_WIN32)
-// TODO: check and enable Windows support
+#elif defined(_WIN32)
 #include <windows.h>
 static int nproc(void) {
 	SYSTEM_INFO sysinfo;
@@ -226,10 +266,10 @@ static int nproc(void) {
 }
 #endif
 
-static int java_string_hash(const char *str) {
+static int32_t java_string_hash(const char *str) {
 	size_t len = strlen(str);
 	unsigned hash = 0;
-	long coef = 1;
+	uint64_t coef = 1;
 	while (len--) {
 		hash += str[len] * coef;
 		coef *= 31;
@@ -268,7 +308,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	char *end;
-	long seed = strtol(argv[optind+0], &end, 10);
+	uint64_t seed = strtol(argv[optind+0], &end, 10);
 	if (*end) {
 		seed = java_string_hash(argv[optind+0]);
 	}
@@ -286,7 +326,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	putchar('\n');
-	printf("  Seed:       %ld\n", seed);
+	printf("  Seed:       %"PRIi64"\n", seed);
 	printf("  Range:      %d\n", range);
 	printf("  Threshold: %c%d\n", thres < 0 ? '<' : '>', thres < 0 ? -thres : thres);
 	printf("  Threads:    %d\n", nthread);
@@ -304,7 +344,5 @@ int main(int argc, char *argv[]) {
 		.data = NULL,
 	};
 
-	begin_search(&param, nthread);
-
-	return 0;
+	return begin_search(&param, nthread);
 }
