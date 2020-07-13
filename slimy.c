@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <threads.h>
 #include <unistd.h>
 
@@ -220,6 +221,17 @@ static int nproc(void) {
 }
 #endif
 
+static int java_string_hash(const char *str) {
+	size_t len = strlen(str);
+	unsigned hash = 0;
+	long coef = 1;
+	while (len--) {
+		hash += str[len] * coef;
+		coef *= 31;
+	}
+	return hash;
+}
+
 static void usage(FILE *f) {
 	fputs("Usage: slimy [-j NUM_THREADS] SEED RANGE THRESHOLD\n", f);
 }
@@ -250,13 +262,18 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	// TODO: string seeds
-	long seed = atol(argv[optind+0]);
+	char *end;
+	long seed = strtol(argv[optind+0], &end, 10);
+	if (*end) {
+		seed = java_string_hash(argv[optind+0]);
+	}
+
 	int range = atoi(argv[optind+1]);
 	if (!range) {
 		fprintf(stderr, "Invalid range: %s\n", argv[optind+1]);
 		return 1;
 	}
+
 	int thres = atoi(argv[optind+2]);
 	if (!thres) {
 		fprintf(stderr, "Invalid threshold: %s\n", argv[optind+2]);
