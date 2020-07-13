@@ -1,6 +1,6 @@
 CC := clang -std=c99 -pedantic
-CFLAGS := -Wall
-LDFLAGS :=
+CFLAGS := -Wall -Ofast
+LDFLAGS := -lpthread
 slimy: slimy.c
 
 .PHONY: clean
