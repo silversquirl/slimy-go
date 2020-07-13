@@ -124,6 +124,15 @@ int search_strips(void *data) {
 		} \
 	} while (0)
 
+	// Circle info
+	int owidths[side];
+	int iwidths[side];
+	for (int cz = -orad; cz <= orad; cz++) {
+		int cz2 = cz*cz;
+		owidths[cz+orad] = isqrt(orad2 - cz2);
+		iwidths[cz+orad] = irad2 < cz2 ? 0 : isqrt(irad2 - cz2);
+	}
+
 	for (int x = param->start.x; x < param->end.x; x++) {
 		// Pre-cache a full circle's box
 		for (int z = param->start.z - orad; z < param->start.z + orad; z++) {
@@ -136,12 +145,8 @@ int search_strips(void *data) {
 			// Count slime chunks
 			int count = 0;
 			for (int cz = -orad; cz <= orad; cz++) {
-				int cz2 = cz*cz;
-				// TODO: precompute these isqrts
-				// Outer circle width at current pos
-				int owidth = isqrt(orad2 - cz2);
-				// Inner circle width at current pos
-				int iwidth = irad2 <= cz2 ? 0 : isqrt(irad2 - cz2);
+				int owidth = owidths[cz+orad];
+				int iwidth = iwidths[cz+orad];
 
 #ifdef PRETTY_PICTURES
 				for (int cx = -orad; cx <= orad; cx++) {
