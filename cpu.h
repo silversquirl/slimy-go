@@ -2,27 +2,7 @@
 #define SLIMY_CPU_H
 
 #include <stdint.h>
-#include "threadshim.h"
-
-struct chunkpos {
-	int x, z;
-};
-
-struct cluster {
-	int x, z;
-	int count;
-};
-
-struct searchparams {
-	int64_t seed;
-	int range;
-	int threshold; // positive for above, negative for below
-
-	int outer_rad, inner_rad;
-
-	void (*cb)(struct cluster clus, void *data);
-	void *data;
-};
+#include "common.h"
 
 struct threadparams {
 	thrd_t thr;
@@ -31,7 +11,7 @@ struct threadparams {
 };
 
 _Bool is_slimy(int64_t seed, int32_t x, int32_t z);
-THREAD_RET search_strips(void *data);
-int begin_search(struct searchparams *param, int nthread);
+THREAD_RET cpu_search_strips(void *data);
+int cpu_search(struct searchparams *param, int nthread);
 
 #endif

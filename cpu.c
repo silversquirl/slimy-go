@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include "common.h"
 #include "cpu.h"
 #include "threadshim.h"
 
@@ -42,38 +43,7 @@ static inline int32_t roundup_pow2(int32_t n) {
 	return n;
 }
 
-static int32_t isqrt(int32_t n) {
-	static int32_t lut[72] = {
-		0, 1, 1, 1, 2, 2, 2, 2,
-		2, 3, 3, 3, 3, 3, 3, 3,
-		4, 4, 4, 4, 4, 4, 4, 4,
-		4, 5, 5, 5, 5, 5, 5, 5,
-		5, 5, 5, 5, 6, 6, 6, 6,
-		6, 6, 6, 6, 6, 6, 6, 6,
-		6, 7, 7, 7, 7, 7, 7, 7,
-		7, 7, 7, 7, 7, 7, 7, 7,
-		8, 8, 8, 8, 8, 8, 8, 8,
-	};
-	if (n < sizeof lut / sizeof *lut) return lut[n];
-
-	// LUT miss, fallback to Newton's method
-#ifdef __GNUC__
-	int32_t x = 1 << ((__builtin_clz(n) ^ 31) / 2);
-#else
-	int32_t x = n;
-#endif
-
-	for (;;) {
-		x = (x + n/x) / 2;
-		if (x*x <= n && (x+1)*(x+1) > n) return x;
-	}
-}
-
-static inline _Bool check_threshold(int count, int thres) {
-	return thres < 0 ? count <= -thres : count >= thres;
-}
-
-THREAD_RET search_strips(void *data) {
+THREAD_RET cpu_search_strips(void *data) {
 	struct threadparams *param = data;
 	int orad = param->common->outer_rad;
 	int orad2 = orad*orad;
@@ -147,7 +117,7 @@ THREAD_RET search_strips(void *data) {
 	return 0;
 }
 
-int begin_search(struct searchparams *param, int nthread) {
+int cpu_search(struct searchparams *param, int nthread) {
 	int startx = -param->range, endx = param->range;
 	int startz = startx, endz = endx;
 	int xrange = 2*param->range;
@@ -166,7 +136,7 @@ int begin_search(struct searchparams *param, int nthread) {
 
 		threads[i].end = (struct chunkpos){posx, endz};
 
-		if (thrd_create(&threads[i].thr, search_strips, &threads[i]) != thrd_success) {
+		if (thrd_create(&threads[i].thr, cpu_search_strips, &threads[i]) != thrd_success) {
 			fprintf(stderr, "Error starting thread %d\n", i);
 			return 1;
 		}
