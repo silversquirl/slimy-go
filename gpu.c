@@ -147,6 +147,7 @@ int gpu_search(struct searchparams *param) {
 		}
 	}
 
+	// TODO: thin rectangular group size may be faster than square
 	int searchw = 2*param->range;
 	GLuint groupw = searchw, groupr = 0, collw = 1;
 	enum {GROUP_LIMIT = 0x800};

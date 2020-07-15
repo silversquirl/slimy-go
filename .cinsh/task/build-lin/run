@@ -1,0 +1,2 @@
+#!/bin/sh
+BUILDDIR="$PWD" make -C base -f linux.mk

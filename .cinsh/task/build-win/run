@@ -1,0 +1,23 @@
+#!/bin/sh -e
+glew_ver=2.1.0
+glfw_ver=3.3.2
+
+glew=glew-$glew_ver
+glfw=glfw-$glfw_ver
+
+mkdir lib
+
+curl -Lo "$glew.zip" "https://sourceforge.net/projects/glew/files/glew/$glew_ver/$glew.zip"
+unzip "$glew.zip"
+(cd "$glew" && make -j$(nproc) SYSTEM=linux-mingw64 HOST=x86_64-w64-mingw32)
+cp "$glew/lib/"* lib/
+
+curl -Lo "$glfw.zip" "https://github.com/glfw/glfw/releases/download/$glfw_ver/$glfw.zip"
+unzip "$glfw.zip"
+(cd "$glfw" && cmake -DCMAKE_TOOLCHAIN_FILE=CMake/x86_64-w64-mingw32.cmake . && make -j$(nproc))
+cp "$glfw/src/libglfw3.a" lib/
+
+BUILDDIR="$PWD" \
+CFLAGS="-I$PWD/$glew/include -I$PWD/$glfw/include" \
+LDFLAGS="-L$PWD/lib" \
+make -C base -f windows.mk

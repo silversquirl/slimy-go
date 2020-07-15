@@ -5,10 +5,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#include <GL/glew.h>
 #include "cpu.h"
 
 #ifdef ENABLE_GPU
+#include <GL/glew.h>
 #include "gpu.h"
 #endif
 
@@ -173,7 +173,9 @@ int main(int argc, char *argv[]) {
 	case MODE_CPU:
 		return cpu_search(&param, nthread);
 
+#ifdef ENABLE_GPU
 	case MODE_GPU:
 		return gpu_search(&param);
+#endif
 	}
 }
