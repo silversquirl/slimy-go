@@ -42,3 +42,5 @@ make win # Build only the Windows binary
 
 To build CPU-only binaries, which does not require GLEW or GLFW3, add `NOGPU=1` to
 the end of one of the above `make` commands.
+
+[cinsh]: https://github.com/vktec/cinsh
