@@ -43,6 +43,12 @@ int gpu_init(void) {
 		return 1;
 	}
 
+	if (!GLEW_ARB_compute_variable_group_size) {
+		fprintf(stderr, "Variable workgroup size extension unavailable\n");
+		glfwTerminate();
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -85,8 +91,35 @@ static GLuint build_program(const char *name, const char *shadersrc) {
 	return result ? prog : 0;
 }
 
+
+#define vgl_perror() _vgl_perror(vgl_strerror(), __LINE__, __func__, __FILE__)
+static inline int _vgl_perror(const char *err, int line, const char *func, const char *file) {
+	if (!err) return 0;
+	fprintf(stderr, "%s:%d (%s): %s\n", file, line, func, err);
+	return 1;
+}
+
+static const char *vgl_strerror(void) {
+	switch (glGetError()) {
+	case GL_NO_ERROR:
+		break;
+
+#define _vgl_match_error(err) case GL_##err: return #err;
+	_vgl_match_error(INVALID_ENUM);
+	_vgl_match_error(INVALID_VALUE);
+	_vgl_match_error(INVALID_OPERATION);
+	_vgl_match_error(INVALID_FRAMEBUFFER_OPERATION);
+	_vgl_match_error(OUT_OF_MEMORY);
+	_vgl_match_error(STACK_UNDERFLOW);
+	_vgl_match_error(STACK_OVERFLOW);
+	}
+	return NULL;
+}
+
 // GLSL's bool is the same size as uint, and GLboolean isn't
 typedef GLuint GLSLbool;
+// GLSL's vec3 type has vec4 alignment
+typedef struct {GLint x, y, z, _;} GLSLivec3;
 
 int gpu_search(struct searchparams *param) {
 	int orad = param->outer_rad;
@@ -116,80 +149,94 @@ int gpu_search(struct searchparams *param) {
 
 	int searchw = 2*param->range;
 	GLuint groupw = searchw, groupr = 0, collw = 1;
-	if (groupw > 0x4000) {
-		groupw = 0x4000;
-		collw = groupw / searchw;
-		groupr = groupw % searchw;
+	enum {GROUP_LIMIT = 0x800};
+	if (groupw > GROUP_LIMIT) {
+		groupw = GROUP_LIMIT;
+		collw = searchw / groupw;
+		groupr = searchw % groupw;
 		if (groupr) collw++;
 	}
 
-	// Preprocess
-	char *lsx = strstr(shader_glsl, "LSIZEX");
-	char *lsy = strstr(shader_glsl, "LSIZEY");
-	lsx[snprintf(lsx, 6, "%5d", side)] = ' ';
-	lsy[snprintf(lsy, 6, "%5d", side)] = ' ';
-
 	GLuint prog = build_program("shader.glsl", shader_glsl);
-
-	// Revert preprocessing
-	memcpy(lsx, "LSIZEX", 6);
-	memcpy(lsy, "LSIZEY", 6);
-
 	if (!prog) return 1;
 
 	// Load GPU parameters
 	glUseProgram(prog);
 	glUniform1i64ARB(1, param->seed);
 	glUniform1ui(3, orad);
+	glUniform1i(4, param->threshold);
 
-	GLuint bufs[2];
-	glGenBuffers(2, bufs);
-	GLuint mask_buf = bufs[0], count_buf = bufs[1];
+	GLuint bufs[3];
+	glGenBuffers(3, bufs);
+	GLuint count_buf = bufs[0], mask_buf = bufs[1], result_buf = bufs[2];
+
+	// Allocate counter
+	GLuint count_data = 0;
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
+	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof count_data, &count_data, GL_DYNAMIC_READ);
+	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, count_buf);
+	if (vgl_perror()) return 1;
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 
 	// Load mask
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, mask_buf);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, mask_size, mask, GL_STATIC_DRAW);
+	if (vgl_perror()) return 1;
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mask_buf);
 
-	// Allocate count buffer
-	size_t count_len = groupw * groupw;
-	size_t count_size = count_len * sizeof (GLuint);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, count_buf);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, count_size, NULL, GL_STREAM_READ);
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, count_buf);
+	// Allocate result buffer
+	size_t result_len = groupw * groupw;
+	size_t result_size = result_len * sizeof (GLSLivec3);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, result_buf);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, result_size, NULL, GL_STREAM_READ);
+	if (vgl_perror()) return 1;
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, result_buf);
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	glUseProgram(prog);
+
+	if (vgl_perror()) return 1;
 
 	struct chunkpos pos = {-param->range, -param->range};
 	for (GLuint collx = 0; collx < collw; collx++) {
 		GLuint gwidth = groupw;
 		if (!collx && groupr) gwidth = groupr;
 
+		pos.z = -param->range;
 		for (GLuint colly = 0; colly < collw; colly++) {
 			GLuint gheight = groupw;
 			if (!colly && groupr) gheight = groupr;
 
-			glUniform2i(2, pos.x - orad, pos.z - orad);
-			glDispatchCompute(gwidth, gheight, 1);
+			// Compute values
+			glUniform2i(2, pos.x, pos.z);
+			glDispatchComputeGroupSizeARB(gwidth, gheight, 1, side, side, 1);
 
-			// Read output
-			// TODO: consider doing this in a shader. Requires count buffer to be GL_STREAM_COPY
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, count_buf);
-			GLuint *count_data = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-			for (GLuint ox = 0; ox < gwidth; ox++) {
-				for (GLuint oz = 0; oz < gheight; oz++) {
-					GLuint count = count_data[oz*groupw + ox];
-					if (check_threshold(count, param->threshold)) {
-						int x = pos.x + ox;
-						int z = pos.z + oz;
-						param->cb((struct cluster){x, z, count}, param->data);
-					}
+			// Map buffeers
+			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, result_buf);
+			GLuint *count = glMapBuffer(GL_ATOMIC_COUNTER_BUFFER, GL_READ_WRITE);
+			if (vgl_perror()) return 1;
+			if (*count) {
+				GLSLivec3 *result = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, *count * sizeof *result, GL_MAP_READ_BIT);
+				if (vgl_perror()) return 1;
+
+				// Read computed values
+				for (GLuint i = 0; i < *count; i++) {
+					struct cluster clus = {result[i].x, result[i].y, result[i].z};
+					param->cb(clus, param->data);
 				}
-			}
-			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+				*count = 0;
 
+				// Unmap buffers
+				glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+				glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+			}
+			glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
+			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+			if (vgl_perror()) return 1;
+ 
 			pos.z += gheight;
 		}
 

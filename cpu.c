@@ -43,6 +43,10 @@ static inline int32_t roundup_pow2(int32_t n) {
 	return n;
 }
 
+static inline _Bool check_threshold(int count, int thres) {
+	return thres < 0 ? count <= -thres : count >= thres;
+}
+
 THREAD_RET cpu_search_strips(void *data) {
 	struct threadparams *param = data;
 	int orad = param->common->outer_rad;

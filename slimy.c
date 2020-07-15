@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
 
 	switch (mode) {
 	case MODE_CPU:
-		if (!nthread) nthread = nproc() / 2;
+		if (!nthread) nthread = nproc();
 
 		if (argc - optind != 3) {
 			usage(stderr);

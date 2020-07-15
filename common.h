@@ -26,8 +26,4 @@ struct searchparams {
 
 int32_t isqrt(int32_t n);
 
-static inline _Bool check_threshold(int count, int thres) {
-	return thres < 0 ? count <= -thres : count >= thres;
-}
-
 #endif

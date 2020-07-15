@@ -1,19 +1,25 @@
 #version 430
 #extension GL_ARB_gpu_shader_int64 : require
+#extension GL_ARB_compute_variable_group_size : require
 
-layout(local_size_x = LSIZEX, local_size_y = LSIZEY) in;
+layout(local_size_variable) in;
 
 layout(location = 1) uniform int64_t world_seed;
 layout(location = 2) uniform ivec2 start_pos;
 layout(location = 3) uniform uint orad;
+layout(location = 4) uniform int thres;
+
+layout(binding = 0) uniform atomic_uint resulti;
 
 layout(std430, binding = 1) readonly restrict buffer mask_buf {
 	bool mask[];
 };
 
-layout(std430, binding = 2) coherent restrict buffer output_buf {
-	uint slime_count[];
+layout(std430, binding = 2) restrict buffer output_buf {
+	ivec3 result[];
 };
+
+shared uint count;
 
 int lcg_next(inout uint64_t seed, int bits) {
 	seed = (seed * 0x5DEECE66DUL + 0xBUL) & ((1UL << 48) - 1);
@@ -41,29 +47,40 @@ bool is_slimy(int64_t world_seed, ivec2 pos) {
 	return lcg_next_int(seed, 10) == 0;
 }
 
+bool check_threshold(uint count) {
+	return thres < 0 ? count <= uint(-thres) : count >= uint(thres);
+}
+
 void main() {
-	// Widths of buffers
-	uint outw = gl_NumWorkGroups.x;
-	uint maskw = gl_WorkGroupSize.x;
+	// Zero count
+	bool first = gl_LocalInvocationIndex == 0;
+	if (first) {
+		count = 0;
+	}
+	barrier();
 
-	// Positions in buffers
-	uvec2 outpos = gl_WorkGroupID.xy;
+	// Mask index
+	uint maskw = gl_LocalGroupSizeARB.x;
 	uvec2 maskpos = gl_LocalInvocationID.xy;
-
-	// Indices into buffers
-	uint outi = outpos.y * outw + outpos.x;
 	uint maski = maskpos.y * maskw + maskpos.x;
 
-	// Chunk position
-	ivec2 pos = ivec2(outpos + maskpos) + start_pos - ivec2(orad);
+	// Circle centre position
+	ivec2 centre = ivec2(gl_WorkGroupID.xy) + start_pos;
 
-	// Zero count
-	slime_count[outi] = 0;
-	barrier();
+	// Chunk position
+	ivec2 pos = centre + ivec2(maskpos) - ivec2(orad);
 
 	// Check mask and slime chunk status
 	if (mask[maski] && is_slimy(world_seed, pos)) {
-		groupMemoryBarrier();
-		atomicAdd(slime_count[outi], 1);
+		atomicAdd(count, 1);
+	}
+
+	groupMemoryBarrier();
+	barrier();
+
+	// Write to result buffer
+	if (first && check_threshold(count)) {
+		uint outi = atomicCounterIncrement(resulti);
+		result[outi] = ivec3(centre, count);
 	}
 }
