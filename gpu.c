@@ -5,7 +5,8 @@
 #include "common.h"
 #include "gpu.h"
 
-#include "shader.glsl.h"
+#include "mask.glsl.h"
+#include "slime.glsl.h"
 
 static void glfw_error(int code, const char *desc) {
 	fprintf(stderr, "GLFW error: %s\n", desc);
@@ -158,26 +159,29 @@ int gpu_search(struct searchparams *param) {
 		if (groupr) collw++;
 	}
 
-	GLuint prog = build_program("shader.glsl", shader_glsl);
-	if (!prog) return 1;
+	GLuint slime_prog = build_program("slime.glsl", slime_glsl);
+	if (!slime_prog) return 1;
+	GLuint mask_prog = build_program("mask.glsl", mask_glsl);
+	if (!mask_prog) return 1;
 
 	// Load GPU parameters
-	glUseProgram(prog);
+	glUseProgram(slime_prog);
 	glUniform1i64ARB(1, param->seed);
+	glUseProgram(mask_prog);
 	glUniform1ui(3, orad);
 	glUniform1i(4, param->threshold);
 
-	GLuint bufs[3];
-	glGenBuffers(3, bufs);
-	GLuint count_buf = bufs[0], mask_buf = bufs[1], result_buf = bufs[2];
+	GLuint bufs[4];
+	glGenBuffers(4, bufs);
+	GLuint slime_buf = bufs[0], mask_buf = bufs[1], result_buf = bufs[2], count_buf = bufs[3];
 
-	// Allocate counter
-	GLuint count_data = 0;
-	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
-	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof count_data, &count_data, GL_DYNAMIC_READ);
-	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, count_buf);
+	// Allocate slime buffer
+	size_t slime_len = (groupw + orad) * (groupw + orad);
+	size_t slime_size = slime_len * sizeof (GLSLbool);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, slime_buf);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, slime_size, NULL, GL_STREAM_READ);
 	if (vgl_perror()) return 1;
-	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, slime_buf);
 
 	// Load mask
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, mask_buf);
@@ -195,9 +199,13 @@ int gpu_search(struct searchparams *param) {
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-	glUseProgram(prog);
-
+	// Allocate counter
+	GLuint count_data = 0;
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
+	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof count_data, &count_data, GL_DYNAMIC_READ);
+	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 3, count_buf);
 	if (vgl_perror()) return 1;
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 
 	struct chunkpos pos = {-param->range, -param->range};
 	for (GLuint collx = 0; collx < collw; collx++) {
@@ -209,7 +217,13 @@ int gpu_search(struct searchparams *param) {
 			GLuint gheight = groupw;
 			if (!colly && groupr) gheight = groupr;
 
-			// Compute values
+			// Compute slime chunks
+			glUseProgram(slime_prog);
+			glUniform2i(2, pos.x - orad, pos.z - orad);
+			glDispatchCompute(gwidth + 2*orad, gheight + 2*orad, 1);
+
+			// Compute masks
+			glUseProgram(mask_prog);
 			glUniform2i(2, pos.x, pos.z);
 			glDispatchComputeGroupSizeARB(gwidth, gheight, 1, side, side, 1);
 

@@ -15,7 +15,7 @@ $(info nogpu)
 SRC := $(filter-out gpu.c,$(SRC))
 else
 CFLAGS += -DENABLE_GPU
-HDR += $(BUILDDIR)/shader.glsl.h
+HDR += $(patsubst %,$(BUILDDIR)/%.glsl.h,mask slime)
 endif
 
 OBJ := $(SRC:%.c=$(BUILDDIR)/%.o)
