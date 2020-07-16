@@ -164,7 +164,7 @@ int gpu_search(struct searchparams *param) {
 	GLuint slime_buf = bufs[0], mask_buf = bufs[1], result_buf = bufs[2], count_buf = bufs[3];
 
 	// Allocate slime buffer
-	size_t slime_len = (groupw + orad) * (groupw + orad);
+	size_t slime_len = (groupw + 2*orad) * (groupw + 2*orad);
 	size_t slime_size = slime_len * sizeof (GLSLbool);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, slime_buf);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, slime_size, NULL, GL_STREAM_READ);
