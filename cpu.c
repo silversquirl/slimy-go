@@ -34,15 +34,6 @@ _Bool is_slimy(int64_t world_seed, int32_t x, int32_t z) {
 	return !lcg_next_int(&seed, 10);
 }
 
-static inline int32_t roundup_pow2(int32_t n) {
-	n--;
-	for (int32_t i = 0; i < 5; i++) {
-		n |= n >> (1<<i);
-	}
-	n++;
-	return n;
-}
-
 static inline _Bool check_threshold(int count, int thres) {
 	return thres < 0 ? count <= -thres : count >= thres;
 }
