@@ -1,2 +1,2 @@
-container docker.io/vktec/build
+container docker.io/vktec/build-debian
 out slimy

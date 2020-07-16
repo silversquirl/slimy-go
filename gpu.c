@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include <GL/glew.h>
+#include "lib/glad.h"
 #include <GLFW/glfw3.h>
 #include "common.h"
 #include "gpu.h"
@@ -32,20 +32,8 @@ int gpu_init(void) {
 	}
 
 	glfwMakeContextCurrent(win);
-	if (glewInit() != GLEW_OK) {
-		fprintf(stderr, "Error initializing GLEW\n");
-		glfwTerminate();
-		return 1;
-	}
-
-	if (!GLEW_ARB_gpu_shader_int64) {
-		fprintf(stderr, "64-bit integer extension unavailable\n");
-		glfwTerminate();
-		return 1;
-	}
-
-	if (!GLEW_ARB_compute_variable_group_size) {
-		fprintf(stderr, "Variable workgroup size extension unavailable\n");
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+		fprintf(stderr, "Error initializing GLAD\n");
 		glfwTerminate();
 		return 1;
 	}

@@ -3,10 +3,10 @@ LDFLAGS += -lpthread
 include common.mk
 
 ifndef NOGPU
-CFLAGS += $(shell pkg-config --cflags glew glfw3)
-LDFLAGS += $(shell pkg-config --libs glew glfw3)
+CFLAGS += $(shell pkg-config --cflags glfw3)
+LDFLAGS += $(shell pkg-config --libs glfw3) -lGL -ldl
 endif
 
 $(BUILDDIR)/slimy: $(OBJ)
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	$(CC) -o $@ $^ $(LDFLAGS)

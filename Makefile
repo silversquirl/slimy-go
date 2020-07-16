@@ -4,10 +4,8 @@ BUILDDIR ?= build
 
 all: lin win
 clean:
-	rm -f $(BUILDDIR)/lin/slimy $(BUILDDIR)/win/slimy.exe
-	rm -f $(BUILDDIR)/lin/*.o $(BUILDDIR)/lin/*.glsl.h
-	rm -f $(BUILDDIR)/win/*.o $(BUILDDIR)/win/*.glsl.h
-	-rmdir $(BUILDDIR)/win/ $(BUILDDIR)/lin/ $(BUILDDIR)/
+	rm -rf $(BUILDDIR)/lin/ $(BUILDDIR)/win/
+	-rmdir $(BUILDDIR)/
 
 lin linux:
 	BUILDDIR=$(BUILDDIR)/lin $(MAKE) -f linux.mk

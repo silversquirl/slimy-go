@@ -8,7 +8,7 @@
 #include "cpu.h"
 
 #ifdef ENABLE_GPU
-#include <GL/glew.h>
+#include "lib/glad.h"
 #include "gpu.h"
 #endif
 

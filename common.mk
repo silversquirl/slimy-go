@@ -7,11 +7,10 @@ endif
 CC += -std=c99 -pedantic
 CFLAGS += -Wall -Ofast -I$(BUILDDIR)
 
-SRC := $(wildcard *.c)
+SRC := $(wildcard *.c) lib/glad.c
 HDR := $(wildcard *.h)
 
 ifdef NOGPU
-$(info nogpu)
 SRC := $(filter-out gpu.c,$(SRC))
 else
 CFLAGS += -DENABLE_GPU
@@ -21,9 +20,9 @@ endif
 OBJ := $(SRC:%.c=$(BUILDDIR)/%.o)
 
 $(BUILDDIR)/%.o: %.c $(HDR)
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILDDIR)/%.glsl.h: %.glsl
-	@mkdir -p $(BUILDDIR)
-	python -c"print('char $(patsubst %.glsl,%_glsl,$<)[]={'+','.join(map(hex,map(ord,open('$<').read())))+',0};')" >$@
+	@mkdir -p $(dir $@)
+	python3 -c"print('char $(patsubst %.glsl,%_glsl,$<)[]={'+','.join(map(hex,map(ord,open('$<').read())))+',0};')" >$@
