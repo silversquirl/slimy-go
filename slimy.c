@@ -177,7 +177,9 @@ int main(int argc, char *argv[]) {
 	case MODE_GPU:;
 		struct gpuparam gparam;
 		gpu_init_param(&gparam, &param);
-		return gpu_search(&gparam);
+		int ret = gpu_search(&gparam);
+		gpu_del_param(&gparam);
+		return ret;
 #endif
 	}
 }

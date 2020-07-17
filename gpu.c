@@ -204,6 +204,13 @@ int gpu_init_param(struct gpuparam *gparam, struct searchparams *param) {
 	return 0;
 }
 
+void gpu_del_param(struct gpuparam *gparam) {
+	glDeleteProgram(gparam->slime_prog);
+	glDeleteProgram(gparam->mask_prog);
+	GLuint bufs[4] = {gparam->slime_buf, gparam->mask_buf, gparam->result_buf, gparam->count_buf};
+	glDeleteBuffers(4, bufs);
+}
+
 int gpu_search(struct gpuparam *gparam) {
 	BENCH_INIT();
 

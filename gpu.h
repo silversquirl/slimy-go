@@ -13,6 +13,7 @@ struct gpuparam {
 
 int gpu_init(void);
 int gpu_init_param(struct gpuparam *gparam, struct searchparams *param);
+void gpu_del_param(struct gpuparam *gparam);
 int gpu_search(struct gpuparam *gparam);
 
 #endif
