@@ -28,19 +28,13 @@ bool check_threshold(uint count) {
 
 void main() {
 	// Zero count
-	bool first = gl_LocalInvocationIndex == 0;
-	if (first) {
-		count = 0;
-	}
+	count = 0;
 	barrier();
 
 	// Mask index
 	uint maskw = gl_LocalGroupSizeARB.x;
 	uvec2 maskpos = gl_LocalInvocationID.xy;
 	uint maski = maskpos.y * maskw + maskpos.x;
-
-	// Circle centre position
-	ivec2 centre = ivec2(gl_WorkGroupID.xy) + start_pos;
 
 	// Chunk position/index
 	uint slimew = gl_NumWorkGroups.x + 2*orad;
@@ -56,7 +50,9 @@ void main() {
 	barrier();
 
 	// Write to result buffer
+	bool first = gl_LocalInvocationIndex == 0;
 	if (first && check_threshold(count)) {
+		ivec2 centre = ivec2(gl_WorkGroupID.xy) + start_pos;
 		uint outi = atomicCounterIncrement(resulti);
 		result[outi] = ivec3(centre, count);
 	}

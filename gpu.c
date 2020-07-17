@@ -111,6 +111,8 @@ typedef GLuint GLSLbool;
 typedef struct {GLint x, y, z, _;} GLSLivec3;
 
 int gpu_search(struct searchparams *param) {
+	BENCH_INIT();
+
 	int orad = param->outer_rad;
 	int orad2 = orad*orad;
 	int irad = param->inner_rad;
@@ -206,19 +208,26 @@ int gpu_search(struct searchparams *param) {
 			if (!colly && groupr) gheight = groupr;
 
 			// Compute slime chunks
+			BENCH_BEGIN("slime");
 			glUseProgram(slime_prog);
 			glUniform2i(2, pos.x - orad, pos.z - orad);
 			glDispatchCompute(gwidth + 2*orad, gheight + 2*orad, 1);
+			BENCH_END();
 
 			// Compute masks
+			BENCH_BEGIN("mask");
 			glUseProgram(mask_prog);
 			glUniform2i(2, pos.x, pos.z);
 			glDispatchComputeGroupSizeARB(gwidth, gheight, 1, side, side, 1);
+			BENCH_END();
 
 			// Map buffeers
+			BENCH_BEGIN("map");
 			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, result_buf);
 			GLuint *count = glMapBuffer(GL_ATOMIC_COUNTER_BUFFER, GL_READ_WRITE);
+			BENCH_END();
+			BENCH_BEGIN("read");
 			if (vgl_perror()) return 1;
 			if (*count) {
 				GLSLivec3 *result = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, *count * sizeof *result, GL_MAP_READ_BIT);
@@ -237,6 +246,7 @@ int gpu_search(struct searchparams *param) {
 			}
 			glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
 			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+			BENCH_END();
 
 			if (vgl_perror()) return 1;
  
