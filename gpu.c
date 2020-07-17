@@ -110,8 +110,8 @@ typedef GLuint GLSLbool;
 // GLSL's vec3 type has vec4 alignment
 typedef struct {GLint x, y, z, _;} GLSLivec3;
 
-int gpu_search(struct searchparams *param) {
-	BENCH_INIT();
+int gpu_init_param(struct gpuparam *gparam, struct searchparams *param) {
+	gparam->param = param;
 
 	int orad = param->outer_rad;
 	int orad2 = orad*orad;
@@ -138,93 +138,102 @@ int gpu_search(struct searchparams *param) {
 		}
 	}
 
-	// TODO: thin rectangular group size may be faster than square
-	int searchw = 2*param->range;
-	GLuint groupw = searchw, groupr = 0, collw = 1;
+	GLuint searchw = 2*param->range;
+	gparam->groupw = searchw;
+	gparam->groupr = 0;
+	gparam->collw = 1;
 	enum {GROUP_LIMIT = 0x800};
-	if (groupw > GROUP_LIMIT) {
-		groupw = GROUP_LIMIT;
-		collw = searchw / groupw;
-		groupr = searchw % groupw;
-		if (groupr) collw++;
+	if (gparam->groupw > GROUP_LIMIT) {
+		gparam->groupw = GROUP_LIMIT;
+		gparam->collw = searchw / gparam->groupw;
+		gparam->groupr = searchw % gparam->groupw;
+		if (gparam->groupr) gparam->collw++;
 	}
 
-	GLuint slime_prog = build_program("slime.glsl", slime_glsl);
-	if (!slime_prog) return 1;
-	GLuint mask_prog = build_program("mask.glsl", mask_glsl);
-	if (!mask_prog) return 1;
+	gparam->slime_prog = build_program("slime.glsl", slime_glsl);
+	if (!gparam->slime_prog) return 1;
+	gparam->mask_prog = build_program("mask.glsl", mask_glsl);
+	if (!gparam->mask_prog) return 1;
 
 	// Load GPU parameters
-	glUseProgram(slime_prog);
+	glUseProgram(gparam->slime_prog);
 	glUniform1i64ARB(1, param->seed);
-	glUseProgram(mask_prog);
+	glUseProgram(gparam->mask_prog);
 	glUniform1ui(3, orad);
 	glUniform1i(4, param->threshold);
 
 	GLuint bufs[4];
 	glGenBuffers(4, bufs);
-	GLuint slime_buf = bufs[0], mask_buf = bufs[1], result_buf = bufs[2], count_buf = bufs[3];
+	gparam->slime_buf = bufs[0];
+	gparam->mask_buf = bufs[1];
+	gparam->result_buf = bufs[2];
+	gparam->count_buf = bufs[3];
 
 	// Allocate slime buffer
-	size_t slime_len = (groupw + 2*orad) * (groupw + 2*orad);
+	size_t slime_len = (gparam->groupw + 2*orad) * (gparam->groupw + 2*orad);
 	size_t slime_size = slime_len * sizeof (GLSLbool);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, slime_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, gparam->slime_buf);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, slime_size, NULL, GL_STREAM_READ);
 	if (vgl_perror()) return 1;
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, slime_buf);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, gparam->slime_buf);
 
 	// Load mask
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, mask_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, gparam->mask_buf);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, mask_size, mask, GL_STATIC_DRAW);
 	if (vgl_perror()) return 1;
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, mask_buf);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, gparam->mask_buf);
 
 	// Allocate result buffer
-	size_t result_len = groupw * groupw;
+	size_t result_len = gparam->groupw * gparam->groupw;
 	size_t result_size = result_len * sizeof (GLSLivec3);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, result_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, gparam->result_buf);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, result_size, NULL, GL_STREAM_READ);
 	if (vgl_perror()) return 1;
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, result_buf);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, gparam->result_buf);
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	// Allocate counter
 	GLuint count_data = 0;
-	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
+	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, gparam->count_buf);
 	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof count_data, &count_data, GL_DYNAMIC_READ);
-	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 3, count_buf);
+	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 3, gparam->count_buf);
 	if (vgl_perror()) return 1;
 	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 
-	struct chunkpos pos = {-param->range, -param->range};
-	for (GLuint collx = 0; collx < collw; collx++) {
-		GLuint gwidth = groupw;
-		if (!collx && groupr) gwidth = groupr;
+	return 0;
+}
 
-		pos.z = -param->range;
-		for (GLuint colly = 0; colly < collw; colly++) {
-			GLuint gheight = groupw;
-			if (!colly && groupr) gheight = groupr;
+int gpu_search(struct gpuparam *gparam) {
+	BENCH_INIT();
 
+	GLuint orad = gparam->param->outer_rad;
+	GLuint side = 2*orad+1; // Side-length of bounding box of outer radius
+
+	struct chunkpos pos = {-gparam->param->range, -gparam->param->range};
+	GLuint gwidth = gparam->groupr ? gparam->groupr : gparam->groupw;
+	for (GLuint collx = 0; collx < gparam->collw; collx++) {
+		pos.z = -gparam->param->range;
+		GLuint gheight = gparam->groupr ? gparam->groupr : gparam->groupw;
+		for (GLuint colly = 0; colly < gparam->collw; colly++) {
 			// Compute slime chunks
 			BENCH_BEGIN("slime");
-			glUseProgram(slime_prog);
+			glUseProgram(gparam->slime_prog);
 			glUniform2i(2, pos.x - orad, pos.z - orad);
 			glDispatchCompute(gwidth + 2*orad, gheight + 2*orad, 1);
 			BENCH_END();
 
 			// Compute masks
 			BENCH_BEGIN("mask");
-			glUseProgram(mask_prog);
+			glUseProgram(gparam->mask_prog);
 			glUniform2i(2, pos.x, pos.z);
 			glDispatchComputeGroupSizeARB(gwidth, gheight, 1, side, side, 1);
 			BENCH_END();
 
 			// Map buffeers
 			BENCH_BEGIN("map");
-			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, count_buf);
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, result_buf);
+			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, gparam->count_buf);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, gparam->result_buf);
 			GLuint *count = glMapBuffer(GL_ATOMIC_COUNTER_BUFFER, GL_READ_WRITE);
 			BENCH_END();
 			BENCH_BEGIN("read");
@@ -236,7 +245,7 @@ int gpu_search(struct searchparams *param) {
 				// Read computed values
 				for (GLuint i = 0; i < *count; i++) {
 					struct cluster clus = {result[i].x, result[i].y, result[i].z};
-					param->cb(clus, param->data);
+					gparam->param->cb(clus, gparam->param->data);
 				}
 				*count = 0;
 
@@ -251,9 +260,11 @@ int gpu_search(struct searchparams *param) {
 			if (vgl_perror()) return 1;
  
 			pos.z += gheight;
+			gheight = gparam->groupw;
 		}
 
 		pos.x += gwidth;
+		gwidth = gparam->groupw;
 	}
 
 	return 0;

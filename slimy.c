@@ -174,8 +174,10 @@ int main(int argc, char *argv[]) {
 		return cpu_search(&param, nthread);
 
 #ifdef ENABLE_GPU
-	case MODE_GPU:
-		return gpu_search(&param);
+	case MODE_GPU:;
+		struct gpuparam gparam;
+		gpu_init_param(&gparam, &param);
+		return gpu_search(&gparam);
 #endif
 	}
 }
