@@ -256,8 +256,6 @@ int main(int argc, char *argv[]) {
 	int v = range;
 	while (v) pad++, v /= 10;
 
-	int prev = 1<<30; ////////
-
 	size_t idx[nthread];
 	for (int i = 0; i < nthread; i++) idx[i] = 0;
 	for (;;) {
@@ -284,12 +282,6 @@ int main(int argc, char *argv[]) {
 		} else {
 			printf("(%*d, %*d) \t%d chunk%s\n", pad, maxc.x, pad, maxc.z, maxc.count, maxc.count == 1 ? "" : "s");
 		}
-
-		if (maxc.count > prev) {
-		#include <signal.h>
-			printf("ERROR\n"); raise(SIGTRAP);
-		}
-		prev = maxc.count; ////////
 	}
 done:
 
