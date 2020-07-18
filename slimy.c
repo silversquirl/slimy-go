@@ -12,8 +12,45 @@
 #include "gpu.h"
 #endif
 
-static void print_cb(struct cluster clus, void *data) {
-	printf("(%d, %d)  %d chunk%s\n", clus.x, clus.z, clus.count, clus.count == 1 ? "" : "s");
+struct clusterbuf {
+	size_t len, alloc;
+	struct cluster *buf;
+};
+
+static inline _Bool inorder(struct cluster a, struct cluster b) {
+	long ax = a.x, az = a.z;
+	long bx = b.x, bz = b.z;
+	// Sort by count, then by distance from origin
+	if (a.count > b.count) return 1;
+	if (a.count < b.count) return 0;
+	return ax*ax + az*az <= bx*bx + bz*bz;
+}
+
+static void collect_cb(struct cluster clus, int threadid, void *data) {
+	struct clusterbuf *buf = data;
+	buf += threadid;
+
+	if (buf->len >= buf->alloc) {
+		size_t alloc = buf->alloc * 2;
+		void *mem = realloc(buf->buf, alloc * sizeof *buf->buf);
+		if (!mem) {
+			fprintf(stderr, "Error allocating memory for buffer on thread %d\n", threadid);
+			return;
+		}
+		buf->alloc = alloc;
+		buf->buf = mem;
+	}
+
+	size_t i;
+	for (i = buf->len; i > 0; i--) {
+		if (inorder(buf->buf[i-1], clus)) {
+			break;
+		} else {
+			buf->buf[i] = buf->buf[i-1];
+		}
+	}
+	buf->buf[i] = clus;
+	buf->len++;
 }
 
 #ifdef _POSIX_VERSION
@@ -47,7 +84,7 @@ static int32_t java_string_hash(const char *str) {
 
 static void usage(FILE *f) {
 	fputs(
-		"Usage: slimy [-j NUM_THREADS] "
+		"Usage: slimy [-o FILENAME.csv] [-j NUM_THREADS] "
 #ifdef ENABLE_GPU
 		"[-g] "
 #endif
@@ -55,6 +92,7 @@ static void usage(FILE *f) {
 }
 
 int main(int argc, char *argv[]) {
+	FILE *csv = NULL;
 	int nthread = 0;
 	enum {
 		MODE_CPU,
@@ -64,7 +102,7 @@ int main(int argc, char *argv[]) {
 	} mode = MODE_CPU;
 
 	const char *optstr =
-		"hj:"
+		"ho:j:"
 #ifdef ENABLE_GPU
 		"g"
 #endif
@@ -79,6 +117,17 @@ int main(int argc, char *argv[]) {
 		case 'h':
 			usage(stdout);
 			return 0;
+
+		case 'o':
+			if (csv) fclose(csv);
+			csv = fopen(optarg, "w");
+			if (!csv) {
+				fputs("Error opening file for writing: ", stderr);
+				perror(optarg);
+				return 1;
+			}
+			break;
+
 		case 'j':
 			nthread = atoi(optarg);
 			if (!nthread) fprintf(stderr, "Invalid thread count: %s\n", optarg);
@@ -87,6 +136,7 @@ int main(int argc, char *argv[]) {
 #ifdef ENABLE_GPU
 		case 'g':
 			mode = MODE_GPU;
+			break;
 #endif
 		}
 	}
@@ -130,6 +180,7 @@ int main(int argc, char *argv[]) {
 
 #ifdef ENABLE_GPU
 	case MODE_GPU:
+		nthread = 1;
 		if (gpu_init()) return 1;
 		gl_vers = glGetString(GL_VERSION);
 		if (!gl_vers) {
@@ -157,6 +208,17 @@ int main(int argc, char *argv[]) {
 	}
 	putchar('\n');
 
+	struct clusterbuf results[nthread];
+	for (int i = 0; i < nthread; i++) {
+		results[i].len = 0;
+		results[i].alloc = 8;
+		results[i].buf = malloc(results[i].alloc * sizeof *results[i].buf);
+		if (!results[i].buf) {
+			fprintf(stderr, "Error allocating result buffer\n");
+			return 1;
+		}
+	}
+
 	struct searchparams param = {
 		.seed = seed,
 		.range = range,
@@ -165,13 +227,14 @@ int main(int argc, char *argv[]) {
 		.outer_rad = 8,
 		.inner_rad = 3,
 
-		.cb = print_cb,
-		.data = NULL,
+		.cb = collect_cb,
+		.data = &results,
 	};
 
 	switch (mode) {
 	case MODE_CPU:
-		return cpu_search(&param, nthread);
+		if (cpu_search(&param, nthread)) return 1;
+		break;
 
 #ifdef ENABLE_GPU
 	case MODE_GPU:;
@@ -179,7 +242,56 @@ int main(int argc, char *argv[]) {
 		if (gpu_init_param(&gparam, &param)) return 1;
 		int ret = gpu_search(&gparam);
 		gpu_del_param(&gparam);
-		return ret;
+		if (ret) return ret;
+		break;
 #endif
 	}
+
+	if (csv) {
+		fputs("Slime Count,Chunk X,Chunk Z\n", csv);
+	}
+
+	// Pad for human readable numbers
+	int pad = 1;
+	int v = range;
+	while (v) pad++, v /= 10;
+
+	int prev = 1<<30; ////////
+
+	size_t idx[nthread];
+	for (int i = 0; i < nthread; i++) idx[i] = 0;
+	for (;;) {
+		int i = 0;
+		while (idx[i] >= results[i].len) {
+			if (++i >= nthread) goto done;
+		}
+
+		int max = i;
+		struct cluster maxc = results[max].buf[idx[max]];
+		for (; i < nthread; i++) {
+			if (idx[i] >= results[i].len) continue;
+			struct cluster clus = results[i].buf[idx[i]];
+			if (!inorder(maxc, clus)) {
+				max = i;
+				maxc = clus;
+			}
+		}
+
+		idx[max]++;
+		if (csv) {
+			// TODO: keep a list of top 10 or something
+			fprintf(csv, "%d,%d,%d\n", maxc.count, maxc.x, maxc.z);
+		} else {
+			printf("(%*d, %*d) \t%d chunk%s\n", pad, maxc.x, pad, maxc.z, maxc.count, maxc.count == 1 ? "" : "s");
+		}
+
+		if (maxc.count > prev) {
+		#include <signal.h>
+			printf("ERROR\n"); raise(SIGTRAP);
+		}
+		prev = maxc.count; ////////
+	}
+done:
+
+	return 0;
 }

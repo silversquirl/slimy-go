@@ -26,11 +26,8 @@ static inline int thrd_join(thrd_t thr, int *res) {
 		if (!GetExitCodeThread(thr.h, &dwres)) return thrd_error;
 		*res = dwres;
 	}
-	return thrd_success;
-}
-
-static inline void thrd_close(thrd_t thr) {
 	CloseHandle(thr.h);
+	return thrd_success;
 }
 
 #define THREAD_RET DWORD WINAPI
@@ -39,7 +36,6 @@ static inline void thrd_close(thrd_t thr) {
 
 #include <threads.h>
 #define THREAD_RET int
-static inline void thrd_close(thrd_t thr) {}
 
 #endif
 

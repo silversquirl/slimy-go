@@ -104,7 +104,7 @@ THREAD_RET cpu_search_strips(void *data) {
 			}
 
 			if (check_threshold(count, param->common->threshold)) {
-				param->common->cb((struct cluster){x, z, count}, param->common->data);
+				param->common->cb((struct cluster){x, z, count}, param->threadid, param->common->data);
 			}
 		}
 	}
@@ -123,6 +123,7 @@ int cpu_search(struct searchparams *param, int nthread) {
 
 	struct threadparams threads[nthread];
 	for (int i = 0; i < nthread; i++) {
+		threads[i].threadid = i;
 		threads[i].common = param;
 		threads[i].start = (struct chunkpos){posx, startz};
 
@@ -141,7 +142,6 @@ int cpu_search(struct searchparams *param, int nthread) {
 		if (thrd_join(threads[i].thr, NULL) != thrd_success) {
 			fprintf(stderr, "Error joining thread %d\n", i);
 		}
-		thrd_close(threads[i].thr);
 	}
 
 	return 0;

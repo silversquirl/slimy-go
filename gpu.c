@@ -265,7 +265,7 @@ int gpu_search(struct gpuparam *gparam) {
 				// Read computed values
 				for (GLuint i = 0; i < *count; i++) {
 					struct cluster clus = {result[i].x, result[i].y, result[i].z};
-					gparam->param->cb(clus, gparam->param->data);
+					gparam->param->cb(clus, 0, gparam->param->data);
 				}
 				*count = 0;
 

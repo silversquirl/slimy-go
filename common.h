@@ -20,7 +20,7 @@ struct searchparams {
 
 	int outer_rad, inner_rad;
 
-	void (*cb)(struct cluster clus, void *data);
+	void (*cb)(struct cluster clus, int threadid, void *data);
 	void *data;
 };
 

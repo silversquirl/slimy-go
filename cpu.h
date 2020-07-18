@@ -6,6 +6,7 @@
 
 struct threadparams {
 	thrd_t thr;
+	int threadid;
 	struct searchparams *common;
 	struct chunkpos start, end;
 };

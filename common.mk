@@ -5,7 +5,13 @@ CC := $(DEFAULT_CC)
 endif
 
 CC += -std=c99 -pedantic
-CFLAGS += -Wall -Ofast -I$(BUILDDIR)
+CFLAGS += -Wall -I$(BUILDDIR)
+
+ifdef DEBUG
+CFLAGS += -g
+else
+CFLAGS += -Ofast
+endif
 
 SRC := $(wildcard *.c) lib/glad.c
 HDR := $(wildcard *.h)
