@@ -1,7 +1,6 @@
 #version 430
-#extension GL_ARB_compute_variable_group_size : require
 
-layout(local_size_variable) in;
+layout(local_size_x = SIZEX, local_size_y = SIZEY) in;
 
 layout(location = 2) uniform ivec2 start_pos;
 layout(location = 3) uniform uint orad;
@@ -32,7 +31,7 @@ void main() {
 	barrier();
 
 	// Mask index
-	uint maskw = gl_LocalGroupSizeARB.x;
+	uint maskw = gl_WorkGroupSize.x;
 	uvec2 maskpos = gl_LocalInvocationID.xy;
 	uint maski = maskpos.y * maskw + maskpos.x;
 

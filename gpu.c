@@ -152,7 +152,21 @@ int gpu_init_param(struct gpuparam *gparam, struct searchparams *param) {
 
 	gparam->slime_prog = build_program("slime.glsl", slime_glsl);
 	if (!gparam->slime_prog) return 1;
+
+	// Preprocess to dynamically set workgroup size
+	char *sx = strstr(mask_glsl, "SIZEX"), *sy = strstr(sx, "SIZEY");
+	for (int i = 4; i >= 0; i--) {
+		int dig = side % 10;
+		side /= 10;
+		sx[i] = sy[i] = dig ? '0' + dig : ' ';
+	}
+
 	gparam->mask_prog = build_program("mask.glsl", mask_glsl);
+
+	// Reset preprocessing in case we call this again
+	memcpy(sx, "SIZEX", 5);
+	memcpy(sy, "SIZEY", 5);
+
 	if (!gparam->mask_prog) return 1;
 
 	// Load GPU parameters
@@ -215,7 +229,6 @@ int gpu_search(struct gpuparam *gparam) {
 	BENCH_INIT();
 
 	GLuint orad = gparam->param->outer_rad;
-	GLuint side = 2*orad+1; // Side-length of bounding box of outer radius
 
 	struct chunkpos pos = {-gparam->param->range, -gparam->param->range};
 	GLuint gwidth = gparam->groupr ? gparam->groupr : gparam->groupw;
@@ -234,7 +247,7 @@ int gpu_search(struct gpuparam *gparam) {
 			BENCH_BEGIN("mask");
 			glUseProgram(gparam->mask_prog);
 			glUniform2i(2, pos.x, pos.z);
-			glDispatchComputeGroupSizeARB(gwidth, gheight, 1, side, side, 1);
+			glDispatchCompute(gwidth, gheight, 1);
 			BENCH_END();
 
 			// Map buffeers
@@ -242,9 +255,9 @@ int gpu_search(struct gpuparam *gparam) {
 			glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, gparam->count_buf);
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, gparam->result_buf);
 			GLuint *count = glMapBuffer(GL_ATOMIC_COUNTER_BUFFER, GL_READ_WRITE);
+			if (vgl_perror()) return 1;
 			BENCH_END();
 			BENCH_BEGIN("read");
-			if (vgl_perror()) return 1;
 			if (*count) {
 				GLSLivec3 *result = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, *count * sizeof *result, GL_MAP_READ_BIT);
 				if (vgl_perror()) return 1;

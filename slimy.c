@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
 #ifdef ENABLE_GPU
 	case MODE_GPU:;
 		struct gpuparam gparam;
-		gpu_init_param(&gparam, &param);
+		if (gpu_init_param(&gparam, &param)) return 1;
 		int ret = gpu_search(&gparam);
 		gpu_del_param(&gparam);
 		return ret;
