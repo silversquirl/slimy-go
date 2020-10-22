@@ -17,7 +17,7 @@ func checkResults(t *testing.T, got, expected []SearchResult) {
 func TestSearch100(t *testing.T) {
 	mask := Mask{8, 1}
 	world := World(1)
-	checkResults(t, world.Search(0, 0, 100, 100, 30, mask), []SearchResult{
+	checkResults(t, world.Search(0, 0, 0, 100, 100, 30, mask), []SearchResult{
 		{33, 9, 30}, {32, 8, 33}, {32, 52, 31}, {32, 58, 56}, {32, 18, 79}, {32, 58, 57}, {32, 64, 113}, {32, 61, 117},
 		{32, 62, 117}, {32, 62, 118}, {31, 17, 24}, {31, 17, 25}, {31, 10, 29}, {31, 8, 30}, {31, 17, 26}, {31, 8, 31},
 		{31, 11, 31}, {31, 8, 32}, {31, 9, 32}, {31, 48, 29}, {31, 50, 32}, {31, 51, 32}, {31, 51, 33}, {31, 49, 36},
@@ -44,14 +44,14 @@ func TestSearchMaskTooBig(t *testing.T) {
 				panic(err)
 			}
 		}()
-		world.Search(0, 0, 1, 1, 0, mask)
+		world.Search(0, 0, 0, 1, 1, 0, mask)
 	}()
 }
 
 func TestSearch2000(t *testing.T) {
 	mask := Mask{128 / 16, 24 / 16}
 	world := World(1)
-	checkResults(t, world.Search(-1000, -1000, 1000, 1000, 40, mask), []SearchResult{
+	checkResults(t, world.Search(0, -1000, -1000, 1000, 1000, 40, mask), []SearchResult{
 		{43, -409, 422}, {43, -168, 1019}, {43, -167, 1020}, {43, -168, 1020}, {42, -404, 418}, {42, -406, 421}, {42, -408, 420}, {42, -411, 421},
 		{42, 569, 435}, {42, -167, 1019}, {41, -409, 419}, {41, -409, 420}, {41, -408, 421}, {41, -410, 420}, {41, -410, 421}, {41, -412, 420},
 		{41, -410, 422}, {41, -411, 422}, {41, -410, 423}, {41, 569, 432}, {41, 570, 432}, {41, 570, 433}, {41, 570, 434}, {41, 202, 740},
@@ -60,11 +60,29 @@ func TestSearch2000(t *testing.T) {
 	})
 }
 
-func BenchmarkSearch(b *testing.B) {
+func BenchmarkSearch100(b *testing.B) {
 	mask := Mask{8, 1}
 	world := World(1)
 
 	for i := 0; i < b.N; i++ {
-		world.Search(-500, -500, 500, 500, 1_000_000, mask)
+		world.Search(0, -100, -100, 0, 0, 1_000_000, mask)
+	}
+}
+
+func BenchmarkSearch1k(b *testing.B) {
+	mask := Mask{8, 1}
+	world := World(1)
+
+	for i := 0; i < b.N; i++ {
+		world.Search(0, -500, -500, 500, 500, 1_000_000, mask)
+	}
+}
+
+func BenchmarkSearch5k(b *testing.B) {
+	mask := Mask{8, 1}
+	world := World(1)
+
+	for i := 0; i < b.N; i++ {
+		world.Search(0, 0, 0, 5000, 5000, 1_000_000, mask)
 	}
 }

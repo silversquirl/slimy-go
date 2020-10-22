@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 )
 
@@ -25,6 +26,10 @@ func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask
 	mw, mh := mask.Bounds()
 	if mw >= SectionSize || mh >= SectionSize {
 		panic("Mask bounds exceed section size")
+	}
+
+	if workerCount <= 0 {
+		workerCount = runtime.GOMAXPROCS(0)
 	}
 
 	sectionCh := make(chan *Section, 8)
