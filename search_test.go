@@ -15,7 +15,7 @@ func checkResults(t *testing.T, got, expected []SearchResult) {
 }
 
 func TestSearch100(t *testing.T) {
-	mask := Mask{128 / 16, 24 / 16}
+	mask := Mask{8, 1}
 	world := World(1)
 	checkResults(t, world.Search(0, 0, 100, 100, 30, mask), []SearchResult{
 		{33, 9, 30}, {32, 8, 33}, {32, 52, 31}, {32, 58, 56}, {32, 18, 79}, {32, 58, 57}, {32, 64, 113}, {32, 61, 117},
@@ -58,4 +58,13 @@ func TestSearch2000(t *testing.T) {
 		{41, -169, 1019}, {41, -167, 1021}, {41, -948, 437}, {40, -405, 418}, {40, -407, 421}, {40, -407, 422}, {40, -412, 422}, {40, 571, 432},
 		{40, 570, 435}, {40, -168, 1021}, {40, -947, 437}, {40, -952, 437}, {40, -847, -628}, {40, -847, -630}, {40, 903, -802}, {40, 912, 918},
 	})
+}
+
+func BenchmarkSearch(b *testing.B) {
+	mask := Mask{8, 1}
+	world := World(1)
+
+	for i := 0; i < b.N; i++ {
+		world.Search(-500, -500, 500, 500, 1_000_000, mask)
+	}
 }

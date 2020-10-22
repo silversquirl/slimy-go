@@ -160,7 +160,7 @@ func (sec *Section) CheckMask(x0, z0 int32, mask Mask) (count int) {
 	w, h := mask.Bounds()
 	for z := int32(0); z < h; z++ {
 		for x := int32(0); x < w; x++ {
-			if mask.Query(x, z) && sec.Get(x+x0, z+z0) {
+			if sec.Get(x+x0, z+z0) && mask.Query(x, z) {
 				count++
 			}
 		}
@@ -169,12 +169,8 @@ func (sec *Section) CheckMask(x0, z0 int32, mask Mask) (count int) {
 }
 
 func secIdx(x, z int32) int {
-	if x >= SectionSize {
-		panic("x out of range")
-	}
-	if z >= SectionSize {
-		panic("z out of range")
-	}
+	assert(x < SectionSize, "x out of range")
+	assert(z < SectionSize, "z out of range")
 	return int(SectionSize*z + x)
 }
 
