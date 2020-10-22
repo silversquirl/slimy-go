@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 )
 
@@ -22,7 +21,7 @@ func (w World) CalcChunk(x_, z_ int32) bool {
 	return r.NextInt(10) == 0
 }
 
-func (w World) Search(x0, z0, x1, z1 int32, threshold int, mask Mask) []SearchResult {
+func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask Mask) []SearchResult {
 	mw, mh := mask.Bounds()
 	if mw >= SectionSize || mh >= SectionSize {
 		panic("Mask bounds exceed section size")
@@ -34,7 +33,6 @@ func (w World) Search(x0, z0, x1, z1 int32, threshold int, mask Mask) []SearchRe
 	ctx := searchContext{w, threshold, mask, wgroup, sectionCh, resultCh}
 	go ctx.sendSections(x0, z0, x1, z1)
 
-	workerCount := runtime.GOMAXPROCS(0)
 	wgroup.Add(workerCount)
 	for i := 0; i < workerCount; i++ {
 		go ctx.search()
