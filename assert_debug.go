@@ -1,6 +1,6 @@
 // +build !release
 
-package main
+package slimy
 
 func assert(cond bool, msg interface{}) {
 	if !cond {
