@@ -10,13 +10,12 @@ const SectionSize = 128
 
 type World int64
 
-func (w World) CalcChunk(x_, z_ int32) bool {
-	x, z := int64(x_), int64(z_)
+func (w World) CalcChunk(x, z int32) bool {
 	seed := int64(w) +
-		x*x*4987142 +
-		x*5947611 +
-		z*z*4392871 +
-		z*389711
+		int64(x*x*4987142) +
+		int64(x*5947611) +
+		int64(z*z)*4392871 + // sic
+		int64(z*389711)
 	seed ^= 987234911
 	r := NewRandom(seed)
 	return r.NextInt(10) == 0

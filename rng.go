@@ -22,7 +22,7 @@ func (r *Random) SetSeed(seed int64) {
 
 func (r *Random) Next(bits int) int32 {
 	r.seed = (r.seed*magic + 0xB) & ((1 << 48) - 1)
-	return int32(r.seed >> (48 - bits))
+	return int32(uint64(r.seed) >> (48 - bits))
 }
 
 func (r *Random) NextInt(n int32) int32 {
@@ -34,7 +34,7 @@ func (r *Random) NextInt(n int32) int32 {
 	for {
 		bits = r.Next(31)
 		val = bits % n
-		if bits+n > val {
+		if bits-val+n-1 >= 0 {
 			return val
 		}
 	}
