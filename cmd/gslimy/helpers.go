@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"log"
 	"strings"
 	"unsafe"
@@ -88,20 +89,33 @@ func buildComputeShader(source string) (prog uint32, err error) {
 }
 
 func genDonut(innerRad, outerRad int) image.Image {
-	panic("TODO")
+	dim := image.Rectangle{image.Point{-outerRad, -outerRad}, image.Point{outerRad + 1, outerRad + 1}}
+	img := image.NewAlpha(dim)
+	for y := dim.Min.Y; y < dim.Max.Y; y++ {
+		for x := dim.Min.X; x < dim.Max.X; x++ {
+			var a uint8
+			if innerRad*innerRad < x*x+y*y && x*x+y*y <= outerRad*outerRad {
+				a = 255
+			}
+			img.SetAlpha(x, y, color.Alpha{a})
+		}
+	}
+	return img
 }
 func uploadMask(target uint32, img image.Image) {
-	dim := img.Bounds().Canon().Size()
-	data := make([]uint8, dim.X*dim.Y)
-	for y := 0; y < dim.Y; y++ {
-		for x := 0; x < dim.X; x++ {
+	dim := img.Bounds().Canon()
+	data := make([][4]uint8, dim.Dx()*dim.Dy())
+	for y := dim.Min.Y; y < dim.Max.Y; y++ {
+		for x := dim.Min.X; x < dim.Max.X; x++ {
 			r, g, b, a := img.At(x, y).RGBA()
-			if (r > 0xff || g > 0xff || b > 0xff) && a > 0xff {
-				data[y*dim.X+x] = 0xff
+			if (r > 0x7fff || g > 0x7fff || b > 0x7fff) && a > 0x7fff {
+				tx := x - dim.Min.X
+				ty := y - dim.Min.Y
+				data[ty*dim.Dx()+tx][0] = 0xff
 			}
 		}
 	}
-	gl.TexImage2D(target, 0, gl.R8, int32(dim.X), int32(dim.Y), 0, gl.RED, gl.UNSIGNED_BYTE, gl.Ptr(data))
+	gl.TexImage2D(target, 0, gl.R8, int32(dim.Dx()), int32(dim.Dy()), 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(data))
 }
 
 func debugMsg(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {

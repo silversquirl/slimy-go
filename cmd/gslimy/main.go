@@ -24,15 +24,18 @@ func init() {
 type App struct {
 	worldSeed int64
 	threshold int
-	maskImg   image.Image
 
 	win *glfw.Window
 
 	vao        uint32
+	maskTex    uint32
+	maskDim    image.Point
 	slimeProg  uint32
+	maskProg   uint32
 	gridProg   uint32
 	searchProg uint32
 
+	results []Result
 	damaged bool
 	clicked bool
 	sx, sy  float64
@@ -42,7 +45,7 @@ type App struct {
 }
 
 func NewApp(worldSeed int64, threshold int, maskImg image.Image, vsync bool) (app *App, err error) {
-	app = &App{worldSeed: worldSeed, threshold: threshold, maskImg: maskImg, zoom: 40}
+	app = &App{worldSeed: worldSeed, threshold: threshold, zoom: 40}
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
@@ -58,6 +61,8 @@ func NewApp(worldSeed int64, threshold int, maskImg image.Image, vsync bool) (ap
 	}
 	gl.DebugMessageCallback(debugMsg, nil)
 	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 	if !vsync {
 		glfw.SwapInterval(0)
 	}
@@ -66,6 +71,11 @@ func NewApp(worldSeed int64, threshold int, maskImg image.Image, vsync bool) (ap
 	gl.BindVertexArray(app.vao)
 
 	app.slimeProg, err = buildShader(fsVert, slimeFrag)
+	if err != nil {
+		return nil, err
+	}
+
+	app.maskProg, err = buildShader(fsVert, maskFrag)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +89,14 @@ func NewApp(worldSeed int64, threshold int, maskImg image.Image, vsync bool) (ap
 	if err != nil {
 		return nil, err
 	}
+
+	app.maskDim = maskImg.Bounds().Canon().Size()
+	gl.GenTextures(1, &app.maskTex)
+	gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
+	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
+	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
+	gl.TexParameterfv(gl.TEXTURE_RECTANGLE, gl.TEXTURE_BORDER_COLOR, &[]float32{0, 0, 0, 1}[0])
+	uploadMask(gl.TEXTURE_RECTANGLE, maskImg)
 
 	app.win.SetCursorPosCallback(app.CursorPos)
 	app.win.SetMouseButtonCallback(app.MouseButton)
@@ -104,12 +122,14 @@ func (app *App) Main() {
 func (app *App) SetUniforms() {
 	gl.Uniform3f(0, app.panX, app.panZ, app.zoom)
 	gl.Uniform2i(1, app.w, app.h)
-	gl.Uniform1i64ARB(2, app.worldSeed)
 }
 
 type Result struct {
-	X, Z, Count, _ uint32
+	X, Z     int32
+	Count, _ uint32
 }
+
+const maxResults = 1 << 20
 
 func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	gl.UseProgram(app.searchProg)
@@ -117,11 +137,8 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	gl.Uniform1i64ARB(1, app.worldSeed)
 	gl.Uniform1ui(2, uint32(app.threshold))
 
-	var maskTex uint32
-	gl.GenTextures(1, &maskTex)
 	gl.ActiveTexture(gl.TEXTURE0)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, maskTex)
-	uploadMask(gl.TEXTURE_RECTANGLE, app.maskImg)
+	gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
 
 	// TODO: try out other usage combinations including STREAM, DRAW and READ
 	var resultCount, results uint32
@@ -134,23 +151,27 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	gl.GenBuffers(1, &results)
 	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, results)
 	// Allocate enough space for 16k results. TODO: allow more than this arbitrary limit
-	gl.BufferData(gl.SHADER_STORAGE_BUFFER, 3*4*16384, nil, gl.DYNAMIC_COPY)
+	gl.BufferData(gl.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gl.DYNAMIC_COPY)
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, results)
 
 	// Execute shader
-	maskDim := app.maskImg.Bounds().Canon().Size()
-	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(maskDim.X), uint32(maskDim.Y), 1)
+	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(app.maskDim.X), uint32(app.maskDim.Y), 1)
 	gl.MemoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT | gl.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results
 	gl.GetBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, 4, gl.Ptr(&resultCountVal))
 	if resultCountVal > 0 {
-		resultData := make([]Result, resultCountVal)
-		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, int(unsafe.Sizeof(Result{})*uintptr(resultCountVal)), gl.Ptr(resultData))
+		app.results = make([]Result, resultCountVal)
+		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, int(unsafe.Sizeof(Result{})*uintptr(resultCountVal)), gl.Ptr(app.results))
 
-		fmt.Printf("%d results:\n", len(resultData))
-		for _, result := range resultData {
-			fmt.Printf("  (%4d, %4d)  %d\n", x0+int32(result.X)+int32(maskDim.X/2), z0+int32(result.Z)+int32(maskDim.Y/2), result.Count)
+		fmt.Printf("%d results:\n", len(app.results))
+		for i := range app.results {
+			app.results[i].X += x0
+			app.results[i].Z += z0
+			fmt.Printf("  (%4d, %4d)  %d\n",
+				app.results[i].X+int32(app.maskDim.X/2),
+				app.results[i].Z+int32(app.maskDim.Y/2),
+				app.results[i].Count)
 		}
 	} else {
 		fmt.Println("No results")
@@ -170,11 +191,21 @@ func (app *App) Draw() {
 
 	gl.UseProgram(app.slimeProg)
 	app.SetUniforms()
+	gl.Uniform1i64ARB(2, app.worldSeed)
 	gl.DrawArrays(gl.TRIANGLES, 0, 3)
 
 	gl.UseProgram(app.gridProg)
 	app.SetUniforms()
 	gl.DrawArrays(gl.TRIANGLES, 0, 3)
+
+	if len(app.results) > 0 {
+		gl.UseProgram(app.maskProg)
+		app.SetUniforms()
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
+		gl.Uniform2i(2, app.results[0].X, app.results[0].Z)
+		gl.DrawArrays(gl.TRIANGLES, 0, 3)
+	}
 
 	app.win.SwapBuffers()
 }
@@ -192,10 +223,16 @@ func (app *App) MouseButton(_ *glfw.Window, btn glfw.MouseButton, act glfw.Actio
 	if btn == glfw.MouseButtonLeft {
 		app.clicked = act == glfw.Press
 		app.sx, app.sy = app.win.GetCursorPos()
-	} else if btn == glfw.MouseButtonRight && act == glfw.Press {
+	} else if btn == glfw.MouseButtonMiddle && act == glfw.Press {
 		x0, z0 := int32((app.panX-float32(app.w)/2)/app.zoom), int32((app.panZ-float32(app.h)/2)/app.zoom)
 		x1, z1 := int32((app.panX+float32(app.w)/2)/app.zoom), int32((app.panZ+float32(app.h)/2)/app.zoom)
 		app.RunSearch(x0, z0, x1, z1)
+		app.Damage()
+	} else if btn == glfw.MouseButtonRight && act == glfw.Press {
+		if len(app.results) > 0 {
+			app.results = app.results[1:]
+			app.Damage()
+		}
 	}
 }
 func (app *App) Scroll(_ *glfw.Window, x, y float64) {
@@ -226,7 +263,7 @@ func main() {
 
 	var maskImg image.Image
 	if *mask == "" {
-		maskImg = genDonut(24, 128)
+		maskImg = genDonut(1, 8)
 	} else {
 		f, err := os.Open(*mask)
 		if err != nil {
