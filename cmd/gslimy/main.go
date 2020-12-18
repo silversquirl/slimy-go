@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"sort"
 	"unsafe"
 
 	_ "image/gif"
@@ -129,6 +130,17 @@ type Result struct {
 	Count, _ uint32
 }
 
+func (a Result) OrderBefore(b Result) bool {
+	if false && a.Count != b.Count {
+		return a.Count > b.Count
+	} else if a.X != b.X {
+		return a.X < b.X
+	} else if a.Z != b.Z {
+		return a.Z < b.Z
+	}
+	return false
+}
+
 const maxResults = 1 << 20
 
 func (app *App) RunSearch(x0, z0, x1, z1 int32) {
@@ -163,6 +175,10 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	if resultCountVal > 0 {
 		app.results = make([]Result, resultCountVal)
 		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, int(unsafe.Sizeof(Result{})*uintptr(resultCountVal)), gl.Ptr(app.results))
+
+		sort.Slice(app.results, func(i, j int) bool {
+			return app.results[i].OrderBefore(app.results[j])
+		})
 
 		fmt.Printf("%d results:\n", len(app.results))
 		for i := range app.results {
