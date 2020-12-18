@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"runtime"
 
@@ -29,8 +30,8 @@ type App struct {
 	panX, panZ, zoom float32
 }
 
-func NewApp() (app *App, err error) {
-	app = &App{worldSeed: 1, zoom: 40}
+func NewApp(worldSeed int64) (app *App, err error) {
+	app = &App{worldSeed: worldSeed, zoom: 40}
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
@@ -141,12 +142,18 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 }
 
 func main() {
+	seed := flag.Int64("seed", -1, "world seed")
+	flag.Parse()
+	if *seed < 0 {
+		log.Fatal("-seed must be specified")
+	}
+
 	if err := glfw.Init(); err != nil {
 		log.Fatal(err)
 	}
 	defer glfw.Terminate()
 
-	app, err := NewApp()
+	app, err := NewApp(*seed)
 	if err != nil {
 		log.Fatal(err)
 	}

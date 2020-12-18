@@ -54,7 +54,7 @@ bool isSlime(ivec2 c, int64_t worldSeed) {
 }
 
 void main() {
-	ivec2 coord = ivec2((gl_FragCoord.xy + view.xy - 0.5*vec2(dim)) / view.z);
+	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
 	if (!isSlime(coord, worldSeed)) discard;
 	color = vec4(0.4, 1, 0.4, 1);
 }
