@@ -149,6 +149,12 @@ const maxResults = 1 << 20
 func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	// TODO: search asynchronously or on a different thread so we don't block rendering
 
+	// Adjust search region so we scan all centres within the box rather than corners
+	x0 -= int32(app.maskDim.X / 2)
+	x1 -= int32(app.maskDim.X / 2)
+	z0 -= int32(app.maskDim.Y / 2)
+	z1 -= int32(app.maskDim.Y / 2)
+
 	gl.UseProgram(app.searchProg)
 	gl.Uniform2i(0, x0, z0)
 	gl.Uniform1i64ARB(1, app.worldSeed)

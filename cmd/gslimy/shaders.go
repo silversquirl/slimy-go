@@ -47,7 +47,7 @@ out vec4 color;
 void main() {
 ` + fcoord + `
 	vec2 grid = mod(fcoord * view.z, view.z);
-	if (all(greaterThanEqual(grid, vec2(1)))) discard;
+	if (all(greaterThan(grid, vec2(1)))) discard;
 	color = vec4(.3, .3, .3, 1);
 }
 `
