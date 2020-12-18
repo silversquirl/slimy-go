@@ -45,7 +45,8 @@ layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
 layout(location = 1) uniform ivec2 dim; // dimensions of viewport
 out vec4 color;
 void main() {
-	vec2 grid = mod(gl_FragCoord.xy + view.xy - vec2(dim/2), view.z);
+` + fcoord + `
+	vec2 grid = mod(fcoord * view.z, view.z);
 	if (all(greaterThanEqual(grid, vec2(1)))) discard;
 	color = vec4(.3, .3, .3, 1);
 }
@@ -93,8 +94,11 @@ void main() {
 }
 `
 
-const coord = `
-	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
+const fcoord = `
+	vec2 fcoord = vec2(1, -1) * ((gl_FragCoord.xy - dim/2)/view.z + view.xy);
+`
+const coord = fcoord + `
+	ivec2 coord = ivec2(floor(fcoord));
 `
 
 const isSlime = `

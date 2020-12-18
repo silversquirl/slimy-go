@@ -229,8 +229,8 @@ func (app *App) Draw() {
 func (app *App) CursorPos(_ *glfw.Window, x, y float64) {
 	if app.clicked {
 		dx, dy := x-app.sx, y-app.sy
-		app.panX -= float32(dx)
-		app.panZ += float32(dy)
+		app.panX -= float32(dx) / app.zoom
+		app.panZ += float32(dy) / app.zoom
 		app.sx, app.sy = x, y
 		app.Damage()
 	}
