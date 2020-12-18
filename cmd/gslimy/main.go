@@ -132,7 +132,7 @@ type Result struct {
 }
 
 func (a Result) OrderBefore(b Result) bool {
-	if false && a.Count != b.Count {
+	if a.Count != b.Count {
 		return a.Count > b.Count
 	} else if a.X != b.X {
 		return a.X < b.X
@@ -295,7 +295,7 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 
 func main() {
 	seed := flag.Int64("seed", -1, "world seed")
-	threshold := flag.Int("threshold", 40, "slime chunk threshold")
+	threshold := flag.Int("threshold", 35, "slime chunk threshold")
 	mask := flag.String("mask", "", "mask image")
 	vsync := flag.Bool("vsync", true, "enable vsync")
 	flag.Parse()
