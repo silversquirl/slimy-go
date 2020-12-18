@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -9,6 +10,9 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
+	"strings"
+	"time"
 	"unsafe"
 
 	_ "image/gif"
@@ -46,8 +50,16 @@ type App struct {
 	panX, panZ, zoom float32
 }
 
-func NewApp(worldSeed int64, threshold int, maskImg image.Image, vsync bool) (app *App, err error) {
-	app = &App{worldSeed: worldSeed, threshold: threshold, zoom: 40}
+func NewApp(worldSeed int64, threshold int, centerPos [2]float32, maskImg image.Image, vsync bool) (app *App, err error) {
+	app = &App{
+		worldSeed: worldSeed,
+		threshold: threshold,
+
+		panX: centerPos[0],
+		panZ: -centerPos[1],
+		zoom: 40,
+	}
+
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
@@ -154,6 +166,7 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	x1 -= int32(app.maskDim.X / 2)
 	z0 -= int32(app.maskDim.Y / 2)
 	z1 -= int32(app.maskDim.Y / 2)
+	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
 
 	gl.UseProgram(app.searchProg)
 	gl.Uniform2i(0, x0, z0)
@@ -177,11 +190,14 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, results)
 
 	// Execute shader
+	start := time.Now()
 	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(app.maskDim.X), uint32(app.maskDim.Y), 1)
 	gl.MemoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT | gl.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results
 	gl.GetBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, 4, gl.Ptr(&resultCountVal))
+	end := time.Now()
+	fmt.Printf("Search finished in %s\n", end.Sub(start))
 	if resultCountVal > 0 {
 		app.results = make([]Result, resultCountVal)
 		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, int(unsafe.Sizeof(Result{})*uintptr(resultCountVal)), gl.Ptr(app.results))
@@ -293,10 +309,27 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 	app.Damage()
 }
 
+func parsePos(s string) (pos [2]float32, err error) {
+	parts := strings.Split(s, ",")
+	if len(parts) != 2 {
+		return [2]float32{}, errors.New("Position must be of the form 'X,Z')")
+	}
+
+	for i := 0; i < 2; i++ {
+		f, err := strconv.ParseFloat(strings.Trim(parts[i], " \t\r\n"), 32)
+		if err != nil {
+			return [2]float32{}, err
+		}
+		pos[i] = float32(f)
+	}
+	return
+}
+
 func main() {
 	seed := flag.Int64("seed", -1, "world seed")
 	threshold := flag.Int("threshold", 35, "slime chunk threshold")
 	mask := flag.String("mask", "", "mask image")
+	pos := flag.String("pos", "0,0", "starting center position")
 	vsync := flag.Bool("vsync", true, "enable vsync")
 	flag.Parse()
 	if *seed < 0 {
@@ -318,12 +351,17 @@ func main() {
 		}
 	}
 
+	centerPos, err := parsePos(*pos)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if err := glfw.Init(); err != nil {
 		log.Fatal(err)
 	}
 	defer glfw.Terminate()
 
-	app, err := NewApp(*seed, *threshold, maskImg, *vsync)
+	app, err := NewApp(*seed, *threshold, centerPos, maskImg, *vsync)
 	if err != nil {
 		log.Fatal(err)
 	}
