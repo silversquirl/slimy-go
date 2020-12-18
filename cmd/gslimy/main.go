@@ -21,6 +21,7 @@ type App struct {
 	slimeProg uint32
 	gridProg  uint32
 
+	damaged bool
 	clicked bool
 	sx, sy  float64
 	w, h    int32
@@ -62,8 +63,10 @@ func NewApp() (app *App, err error) {
 	app.win.SetCursorPosCallback(app.CursorPos)
 	app.win.SetMouseButtonCallback(app.MouseButton)
 	app.win.SetScrollCallback(app.Scroll)
+	app.win.SetRefreshCallback(app.Refresh)
 	app.win.SetSizeCallback(app.Resize)
 
+	app.Damage()
 	return app, nil
 }
 
@@ -84,7 +87,15 @@ func (app *App) SetUniforms() {
 	gl.Uniform1i64ARB(2, app.worldSeed)
 }
 
+func (app *App) Damage() {
+	app.damaged = true
+}
 func (app *App) Draw() {
+	if !app.damaged {
+		return
+	}
+	app.damaged = false
+
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 
 	gl.UseProgram(app.slimeProg)
@@ -104,6 +115,7 @@ func (app *App) CursorPos(_ *glfw.Window, x, y float64) {
 		app.panX -= float32(dx)
 		app.panZ += float32(dy)
 		app.sx, app.sy = x, y
+		app.Damage()
 	}
 }
 func (app *App) MouseButton(_ *glfw.Window, btn glfw.MouseButton, act glfw.Action, mods glfw.ModifierKey) {
@@ -117,10 +129,15 @@ func (app *App) Scroll(_ *glfw.Window, x, y float64) {
 	if app.zoom < 5 {
 		app.zoom = 5
 	}
+	app.Damage()
+}
+func (app *App) Refresh(_ *glfw.Window) {
+	app.Damage()
 }
 func (app *App) Resize(_ *glfw.Window, w, h int) {
 	gl.Viewport(0, 0, int32(w), int32(h))
 	app.w, app.h = int32(w), int32(h)
+	app.Damage()
 }
 
 func main() {
