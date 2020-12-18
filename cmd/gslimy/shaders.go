@@ -94,6 +94,7 @@ void main() {
 }
 `
 
+// MIRROR CHANGES IN main.go:coord
 const fcoord = `
 	vec2 fcoord = vec2(1, -1) * ((gl_FragCoord.xy - dim/2)/view.z + view.xy);
 `

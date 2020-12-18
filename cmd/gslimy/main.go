@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"math"
 	"os"
 	"runtime"
 	"sort"
@@ -141,9 +142,13 @@ func (a Result) OrderBefore(b Result) bool {
 	return false
 }
 
+// TODO: allow more than this arbitrary limit
+// >1mil results is probably fine for now tho, unless someone searches with stupidly relaxed requirements
 const maxResults = 1 << 20
 
 func (app *App) RunSearch(x0, z0, x1, z1 int32) {
+	// TODO: search asynchronously or on a different thread so we don't block rendering
+
 	gl.UseProgram(app.searchProg)
 	gl.Uniform2i(0, x0, z0)
 	gl.Uniform1i64ARB(1, app.worldSeed)
@@ -162,7 +167,6 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 
 	gl.GenBuffers(1, &results)
 	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, results)
-	// Allocate enough space for 16k results. TODO: allow more than this arbitrary limit
 	gl.BufferData(gl.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gl.DYNAMIC_COPY)
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, results)
 
@@ -191,6 +195,7 @@ func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 		}
 	} else {
 		fmt.Println("No results")
+		app.results = nil
 	}
 }
 
@@ -226,6 +231,21 @@ func (app *App) Draw() {
 	app.win.SwapBuffers()
 }
 
+func ifloor(f float32) int32 {
+	if math.Float32bits(f)>>31 != 0 {
+		return -int32(-f)
+	} else {
+		return int32(f)
+	}
+}
+
+// MIRROR CHANGES IN shaders.go:fcoord
+func (app *App) coord(px, py int32) (chx, chz int32) {
+	chx = +ifloor(float32(px-app.w/2)/app.zoom + app.panX)
+	chz = -ifloor(float32(py-app.h/2)/app.zoom + app.panZ)
+	return
+}
+
 func (app *App) CursorPos(_ *glfw.Window, x, y float64) {
 	if app.clicked {
 		dx, dy := x-app.sx, y-app.sy
@@ -240,8 +260,8 @@ func (app *App) MouseButton(_ *glfw.Window, btn glfw.MouseButton, act glfw.Actio
 		app.clicked = act == glfw.Press
 		app.sx, app.sy = app.win.GetCursorPos()
 	} else if btn == glfw.MouseButtonMiddle && act == glfw.Press {
-		x0, z0 := int32((app.panX-float32(app.w)/2)/app.zoom), int32((app.panZ-float32(app.h)/2)/app.zoom)
-		x1, z1 := int32((app.panX+float32(app.w)/2)/app.zoom), int32((app.panZ+float32(app.h)/2)/app.zoom)
+		x0, z0 := app.coord(0, app.h)
+		x1, z1 := app.coord(app.w, 0)
 		app.RunSearch(x0, z0, x1, z1)
 		app.Damage()
 	} else if btn == glfw.MouseButtonRight && act == glfw.Press {
