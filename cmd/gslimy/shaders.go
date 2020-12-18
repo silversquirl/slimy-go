@@ -18,7 +18,7 @@ layout(location = 2) uniform int64_t worldSeed;
 out vec4 color;
 ` + isSlime + `
 void main() {
-	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
+` + coord + `
 	if (!isSlime(coord, worldSeed)) discard;
 	color = vec4(0.4, 1, 0.4, 1);
 }
@@ -32,7 +32,7 @@ layout(location = 2) uniform ivec2 origin;
 layout(binding = 0) uniform sampler2DRect mask;
 out vec4 color;
 void main() {
-	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
+` + coord + `
 	if (texelFetch(mask, ivec2(coord - origin)).r >= 0.5) discard;
 	color = vec4(0, 0, 0, 0.8);
 }
@@ -45,7 +45,7 @@ layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
 layout(location = 1) uniform ivec2 dim; // dimensions of viewport
 out vec4 color;
 void main() {
-	vec2 grid = mod(vec2(gl_FragCoord.xy + view.xy - vec2(dim/2)), view.z);
+	vec2 grid = mod(gl_FragCoord.xy + view.xy - vec2(dim/2), view.z);
 	if (all(greaterThanEqual(grid, vec2(1)))) discard;
 	color = vec4(.3, .3, .3, 1);
 }
@@ -91,6 +91,10 @@ void main() {
 		}
 	}
 }
+`
+
+const coord = `
+	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
 `
 
 const isSlime = `
