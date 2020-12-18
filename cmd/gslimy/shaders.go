@@ -26,12 +26,59 @@ void main() {
 const slimeFrag = `
 #version 430 core
 #extension GL_ARB_gpu_shader_int64 : require
-
 layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
 layout(location = 1) uniform ivec2 dim; // dimensions of viewport
 layout(location = 2) uniform int64_t worldSeed;
 out vec4 color;
+` + isSlime + `
+void main() {
+	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
+	if (!isSlime(coord, worldSeed)) discard;
+	color = vec4(0.4, 1, 0.4, 1);
+}
+`
 
+const searchComp = `
+#version 430 core
+#extension GL_ARB_gpu_shader_int64 : require
+#extension GL_ARB_compute_variable_group_size : require // TODO: don't require
+layout(local_size_variable) in;
+
+layout(location = 0) uniform ivec2 offset;
+layout(location = 1) uniform int64_t worldSeed;
+layout(location = 2) uniform uint threshold;
+layout(binding = 0) uniform sampler2D mask;
+layout(binding = 0) uniform atomic_uint resultCount;
+layout(std430, binding = 1) buffer resultData {
+	uvec3 results[];
+};
+
+` + isSlime + `
+shared uint count;
+void main() {
+	if (gl_LocalInvocationIndex == 0) {
+		count = 0;
+	}
+	memoryBarrierShared();
+	barrier();
+
+	ivec2 coord = ivec2(gl_WorkGroupID.xy + gl_LocalInvocationID.xy) + offset;
+	bool slime = isSlime(coord, worldSeed);
+	atomicAdd(count, uint(slime));
+	memoryBarrierShared();
+	barrier();
+
+	if (gl_LocalInvocationIndex == 0) {
+		if (count >= threshold) {
+			uint idx = atomicCounterIncrement(resultCount);
+			memoryBarrierAtomicCounter();
+			results[idx] = uvec3(gl_WorkGroupID.xy, count);
+		}
+	}
+}
+`
+
+const isSlime = `
 bool isSlime(ivec2 c, int64_t worldSeed) {
 	// Calculate slime seed
 	uint64_t seed = worldSeed +
@@ -51,11 +98,5 @@ bool isSlime(ivec2 c, int64_t worldSeed) {
 	} while (bits-val+9 < 0);
 	// Check slime chunk
 	return val == 0;
-}
-
-void main() {
-	ivec2 coord = ivec2(1, -1) * ivec2(floor((gl_FragCoord.xy + view.xy - dim/2)/view.z));
-	if (!isSlime(coord, worldSeed)) discard;
-	color = vec4(0.4, 1, 0.4, 1);
 }
 `

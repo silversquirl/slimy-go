@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"image"
 	"log"
 	"strings"
 	"unsafe"
@@ -65,6 +66,42 @@ func buildShader(vert, frag string) (prog uint32, err error) {
 		return 0, getShaderError(prog, gl.GetProgramiv, gl.GetProgramInfoLog)
 	}
 	return prog, nil
+}
+func buildComputeShader(source string) (prog uint32, err error) {
+	shad := gl.CreateShader(gl.COMPUTE_SHADER)
+	if err := compileShader(shad, source); err != nil {
+		return 0, err
+	}
+
+	prog = gl.CreateProgram()
+	gl.AttachShader(prog, shad)
+	gl.LinkProgram(prog)
+	gl.DetachShader(prog, shad)
+
+	var result int32
+	gl.GetProgramiv(prog, gl.LINK_STATUS, &result)
+	if result == 0 {
+		defer gl.DeleteProgram(prog)
+		return 0, getShaderError(prog, gl.GetProgramiv, gl.GetProgramInfoLog)
+	}
+	return prog, nil
+}
+
+func genDonut(innerRad, outerRad int) image.Image {
+	panic("TODO")
+}
+func uploadMask(target uint32, img image.Image) {
+	dim := img.Bounds().Canon().Size()
+	data := make([]uint8, dim.X*dim.Y)
+	for y := 0; y < dim.Y; y++ {
+		for x := 0; x < dim.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if (r > 0xff || g > 0xff || b > 0xff) && a > 0xff {
+				data[y*dim.X+x] = 0xff
+			}
+		}
+	}
+	gl.TexImage2D(target, 0, gl.R8, int32(dim.X), int32(dim.Y), 0, gl.RED, gl.UNSIGNED_BYTE, gl.Ptr(data))
 }
 
 func debugMsg(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
