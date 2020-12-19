@@ -50,13 +50,13 @@ type App struct {
 	panX, panZ, zoom float32
 }
 
-func NewApp(worldSeed int64, threshold int, centerPos [2]float32, maskImg image.Image, vsync bool) (app *App, err error) {
+func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Image, vsync bool) (app *App, err error) {
 	app = &App{
 		worldSeed: worldSeed,
 		threshold: threshold,
 
-		panX: centerPos[0],
-		panZ: -centerPos[1],
+		panX: float32(centerPos[0]),
+		panZ: -float32(centerPos[1]),
 		zoom: 40,
 	}
 
@@ -64,6 +64,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]float32, maskImg image.
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	glfw.WindowHint(glfw.Visible, glfw.False)
 	app.win, err = glfw.CreateWindow(800, 600, "Slimy", nil, nil)
 	if err != nil {
 		return nil, err
@@ -127,6 +128,7 @@ func (app *App) Destroy() {
 }
 
 func (app *App) Main() {
+	app.win.Show()
 	for !app.win.ShouldClose() {
 		app.Draw()
 		glfw.WaitEvents()
@@ -161,12 +163,12 @@ const maxResults = 1 << 20
 func (app *App) RunSearch(x0, z0, x1, z1 int32) {
 	// TODO: search asynchronously or on a different thread so we don't block rendering
 
+	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
 	// Adjust search region so we scan all centres within the box rather than corners
 	x0 -= int32(app.maskDim.X / 2)
 	x1 -= int32(app.maskDim.X / 2)
 	z0 -= int32(app.maskDim.Y / 2)
 	z1 -= int32(app.maskDim.Y / 2)
-	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
 
 	gl.UseProgram(app.searchProg)
 	gl.Uniform2i(0, x0, z0)
@@ -309,27 +311,27 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 	app.Damage()
 }
 
-func parsePos(s string) (pos [2]float32, err error) {
+func parsePos(s string) (pos [2]int, err error) {
 	parts := strings.Split(s, ",")
 	if len(parts) != 2 {
-		return [2]float32{}, errors.New("Position must be of the form 'X,Z')")
+		return [2]int{}, errors.New("Position must be of the form 'X,Z')")
 	}
 
 	for i := 0; i < 2; i++ {
-		f, err := strconv.ParseFloat(strings.Trim(parts[i], " \t\r\n"), 32)
+		pos[i], err = strconv.Atoi(strings.Trim(parts[i], " \t\r\n"))
 		if err != nil {
-			return [2]float32{}, err
+			return [2]int{}, err
 		}
-		pos[i] = float32(f)
 	}
 	return
 }
 
 func main() {
-	seed := flag.Int64("seed", -1, "world seed")
-	threshold := flag.Int("threshold", 35, "slime chunk threshold")
-	mask := flag.String("mask", "", "mask image")
-	pos := flag.String("pos", "0,0", "starting center position")
+	seed := flag.Int64("seed", -1, "world `seed`")
+	threshold := flag.Uint("threshold", 35, "minimum cluster `size`")
+	mask := flag.String("mask", "", "mask image `file`name")
+	pos := flag.String("pos", "0,0", "starting center `position`")
+	search := flag.Uint("search", 0, "run a search with this `range`")
 	vsync := flag.Bool("vsync", true, "enable vsync")
 	flag.Parse()
 	if *seed < 0 {
@@ -361,10 +363,19 @@ func main() {
 	}
 	defer glfw.Terminate()
 
-	app, err := NewApp(*seed, *threshold, centerPos, maskImg, *vsync)
+	app, err := NewApp(*seed, int(*threshold), centerPos, maskImg, *vsync)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer app.Destroy()
-	app.Main()
+
+	if *search > 0 {
+		r := int(*search)
+		app.RunSearch(
+			int32(centerPos[0]-r), int32(centerPos[1]-r),
+			int32(centerPos[0]+r), int32(centerPos[1]+r),
+		)
+	} else {
+		app.Main()
+	}
 }
