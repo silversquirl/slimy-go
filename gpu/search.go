@@ -22,6 +22,10 @@ type Searcher struct {
 func NewSearcher(shareWith *glfw.Window, mask image.Image) (s *Searcher, err error) {
 	s = &Searcher{}
 
+	if err := glfw.Init(); err != nil {
+		return nil, err
+	}
+
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
@@ -65,6 +69,7 @@ func (s *Searcher) Destroy() {
 	gl.DeleteBuffers(1, &s.countBuf)
 	gl.DeleteBuffers(1, &s.resultBuf)
 	s.win.Destroy()
+	glfw.Terminate()
 }
 
 func (s *Searcher) activate() {

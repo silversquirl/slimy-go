@@ -1,17 +1,9 @@
 package main
 
 import (
-	"errors"
-	"flag"
-	"fmt"
 	"image"
-	"log"
 	"math"
-	"os"
 	"runtime"
-	"strconv"
-	"strings"
-	"time"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -21,7 +13,6 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/vktec/slimy"
 	"github.com/vktec/slimy/gpu"
-	"github.com/vktec/slimy/util"
 )
 
 func init() {
@@ -57,6 +48,10 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 		panX: float32(centerPos[0]),
 		panZ: -float32(centerPos[1]),
 		zoom: 40,
+	}
+
+	if err := glfw.Init(); err != nil {
+		return nil, err
 	}
 
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
@@ -112,6 +107,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 
 func (app *App) Destroy() {
 	app.win.Destroy()
+	glfw.Terminate()
 }
 
 func (app *App) activate() {
@@ -176,7 +172,7 @@ func ifloor(f float32) int32 {
 	}
 }
 
-// MIRROR CHANGES IN shaders.go:fcoord
+// MIRROR CHANGES IN gpu/shaders.go:Fcoord
 func (app *App) coord(px, py int32) (chx, chz int32) {
 	chx = +ifloor(float32(px-app.w/2)/app.zoom + app.panX)
 	chz = -ifloor(float32(py-app.h/2)/app.zoom + app.panZ)
@@ -222,103 +218,4 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 	gl.Viewport(0, 0, int32(w), int32(h))
 	app.w, app.h = int32(w), int32(h)
 	app.Damage()
-}
-
-func runSearch(s *gpu.Searcher, x0, z0, x1, z1 int32, threshold int, worldSeed int64) (results []slimy.Result) {
-	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
-	start := time.Now()
-	results = s.Search(x0, z0, x1, z1, threshold, worldSeed)
-	end := time.Now()
-	fmt.Printf("Search finished in %s\n", end.Sub(start))
-	Report(results)
-	return
-}
-
-func Report(results []slimy.Result) {
-	if len(results) > 0 {
-		if len(results) == 1 {
-			fmt.Println("1 result:")
-		} else {
-			fmt.Println(len(results), "results:")
-		}
-		for _, res := range results {
-			fmt.Printf("  (%4d, %4d)  %d\n", res.X, res.Z, res.Count)
-		}
-	} else {
-		fmt.Println("No results")
-	}
-}
-
-func parsePos(s string) (pos [2]int, err error) {
-	parts := strings.Split(s, ",")
-	if len(parts) != 2 {
-		return [2]int{}, errors.New("Position must be of the form 'X,Z')")
-	}
-
-	for i := 0; i < 2; i++ {
-		pos[i], err = strconv.Atoi(strings.Trim(parts[i], " \t\r\n"))
-		if err != nil {
-			return [2]int{}, err
-		}
-	}
-	return
-}
-
-func main() {
-	seed := flag.Int64("seed", -1, "world `seed`")
-	threshold := flag.Uint("threshold", 35, "minimum cluster `size`")
-	mask := flag.String("mask", "", "mask image `file`name")
-	pos := flag.String("pos", "0,0", "starting center `position`")
-	search := flag.Uint("search", 0, "run a search with this `range`")
-	vsync := flag.Bool("vsync", true, "enable vsync")
-	flag.Parse()
-	if *seed < 0 {
-		log.Fatal("-seed must be specified")
-	}
-
-	var maskImg image.Image
-	if *mask == "" {
-		maskImg = util.GenDonut(1, 8)
-	} else {
-		f, err := os.Open(*mask)
-		if err != nil {
-			log.Fatal(err)
-		}
-		maskImg, _, err = image.Decode(f)
-		f.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	centerPos, err := parsePos(*pos)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := glfw.Init(); err != nil {
-		log.Fatal(err)
-	}
-	defer glfw.Terminate()
-
-	if *search > 0 {
-		s, err := gpu.NewSearcher(nil, maskImg)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer s.Destroy()
-		r := int(*search)
-		runSearch(s,
-			int32(centerPos[0]-r), int32(centerPos[1]-r),
-			int32(centerPos[0]+r), int32(centerPos[1]+r),
-			int(*threshold), *seed,
-		)
-	} else {
-		app, err := NewApp(*seed, int(*threshold), centerPos, maskImg, *vsync)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer app.Destroy()
-		app.Main()
-	}
 }
