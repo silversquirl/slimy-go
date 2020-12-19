@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-gl/gl/v4.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/vktec/slimy"
 )
 
 type Searcher struct {
@@ -73,7 +74,11 @@ func (s *Searcher) activate() {
 	}
 }
 
-func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) []Result {
+// TODO: allow more than this arbitrary limit
+// >1mil results is probably fine for now tho, unless someone searches with stupidly relaxed requirements
+const maxResults = 1 << 20
+
+func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) []slimy.Result {
 	// TODO: search asynchronously or on a different thread so we don't block rendering
 	// TODO: split large searches into multiple batches
 
@@ -112,10 +117,10 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 		gpuResults := make([]gpuResult, resultCountVal)
 		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, len(gpuResults)*int(unsafe.Sizeof(gpuResults[0])), gl.Ptr(gpuResults))
 
-		results := make([]Result, len(gpuResults))
+		results := make([]slimy.Result, len(gpuResults))
 		centerOffX, centerOffZ := int32(s.MaskDim.X/2), int32(s.MaskDim.Y/2)
 		for i, gpuRes := range gpuResults {
-			res := Result{
+			res := slimy.Result{
 				x0 + int32(gpuRes.xoff) + centerOffX,
 				z0 + int32(gpuRes.zoff) + centerOffZ,
 				uint(gpuRes.count),

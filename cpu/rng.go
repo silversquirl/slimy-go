@@ -1,6 +1,6 @@
 // Go implementation of Java random
 // Not safe for concurrent use
-package slimy
+package cpu
 
 type Random struct {
 	seed int64

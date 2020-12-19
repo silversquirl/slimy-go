@@ -1,10 +1,12 @@
-package slimy
+package cpu
 
 import (
 	"image/color"
 	"image/draw"
 	"runtime"
 	"sync"
+
+	"github.com/vktec/slimy"
 )
 
 // Draws slime chunks on an image. The search area comes from the image's Bounds
@@ -18,7 +20,7 @@ func (w World) DrawArea(workerCount int, dst draw.Image) {
 	z0, z1 := int32(bounds.Min.Y), int32(bounds.Max.Y)
 
 	sectionCh := make(chan *Section, 8)
-	resultCh := make(chan []SearchResult, 8)
+	resultCh := make(chan []slimy.Result, 8)
 	wgroup := new(sync.WaitGroup)
 	ctx := searchContext{w, 0, Mask{}, wgroup, sectionCh, resultCh}
 	go ctx.sendSections(x0, z0, x1, z1)

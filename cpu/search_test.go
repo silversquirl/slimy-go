@@ -1,8 +1,12 @@
-package slimy
+package cpu
 
-import "testing"
+import (
+	"testing"
 
-func checkResults(t *testing.T, got, expected []SearchResult) {
+	"github.com/vktec/slimy"
+)
+
+func checkResults(t *testing.T, got, expected []slimy.Result) {
 	if len(got) != len(expected) {
 		t.Fatalf("Wrong number of results: expected %d, got %d", len(expected), len(got))
 	}

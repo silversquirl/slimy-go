@@ -1,4 +1,4 @@
-package slimy
+package cpu
 
 import "fmt"
 

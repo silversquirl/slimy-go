@@ -1,9 +1,12 @@
-package slimy
+package cpu
 
 import (
 	"fmt"
 	"runtime"
 	"sync"
+
+	"github.com/vktec/slimy"
+	"github.com/vktec/slimy/util"
 )
 
 const SectionSize = 128
@@ -21,7 +24,7 @@ func (w World) CalcChunk(x, z int32) bool {
 	return r.NextInt(10) == 0
 }
 
-func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask Mask) []SearchResult {
+func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask Mask) []slimy.Result {
 	mw, mh := mask.Bounds()
 	if mw >= SectionSize || mh >= SectionSize {
 		panic("Mask bounds exceed section size")
@@ -32,7 +35,7 @@ func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask
 	}
 
 	sectionCh := make(chan *Section, 8)
-	resultCh := make(chan []SearchResult, 8)
+	resultCh := make(chan []slimy.Result, 8)
 	wgroup := new(sync.WaitGroup)
 	ctx := searchContext{w, threshold, mask, wgroup, sectionCh, resultCh}
 	go ctx.sendSections(x0, z0, x1, z1)
@@ -42,13 +45,13 @@ func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask
 		go ctx.search()
 	}
 
-	var results []SearchResult
+	var results []slimy.Result
 	for sectionResults := range resultCh {
 		start := len(results)
 		results = append(results, sectionResults...)
 		for i := start; i < len(results); i++ {
 			for j := i; j > 0; j-- {
-				if needSwap(results[j-1], results[j]) {
+				if results[j].OrderBefore(results[j-1]) {
 					results[j-1], results[j] = results[j], results[j-1]
 				} else {
 					break
@@ -59,38 +62,13 @@ func (w World) Search(workerCount int, x0, z0, x1, z1 int32, threshold int, mask
 	return results
 }
 
-func needSwap(a, b SearchResult) bool {
-	// First sort by count
-	if a.Count != b.Count {
-		return a.Count < b.Count
-	}
-
-	// Then by distance
-	ad2 := a.X*a.X + a.Z*a.Z
-	bd2 := b.X*b.X + b.Z*b.Z
-	if ad2 != bd2 {
-		return ad2 > bd2
-	}
-
-	// Then by position, purely to break ties so we get consistent ordering
-	if a.X != b.X {
-		return a.X > b.X
-	}
-	return a.Z > b.Z
-}
-
-type SearchResult struct {
-	Count int
-	X, Z  int32
-}
-
 type searchContext struct {
 	world     World
 	threshold int
 	mask      Mask
 	wgroup    *sync.WaitGroup
 	sectionCh chan *Section
-	resultCh  chan []SearchResult
+	resultCh  chan []slimy.Result
 }
 
 func (ctx searchContext) sendSections(x0, z0, x1, z1 int32) {
@@ -140,7 +118,7 @@ func (sec *Section) Compute(world World) {
 	}
 }
 
-func (sec *Section) Search(mask Mask, threshold int) (results []SearchResult) {
+func (sec *Section) Search(mask Mask, threshold int) (results []slimy.Result) {
 	w, h := mask.Bounds()
 	offX, offZ := sec.X+w/2, sec.Z+h/2
 	x1, z1 := SectionSize-w, SectionSize-h
@@ -150,15 +128,15 @@ func (sec *Section) Search(mask Mask, threshold int) (results []SearchResult) {
 			// TODO: avoid checking the full mask area every time
 			//       This can be done by adding the new and subtracting the old chunks
 			count := sec.CheckMask(x, z, mask)
-			if count >= threshold {
-				results = append(results, SearchResult{count, x + offX, z + offZ})
+			if int(count) >= threshold {
+				results = append(results, slimy.Result{x + offX, z + offZ, count})
 			}
 		}
 	}
 	return results
 }
 
-func (sec *Section) CheckMask(x0, z0 int32, mask Mask) (count int) {
+func (sec *Section) CheckMask(x0, z0 int32, mask Mask) (count uint) {
 	w, h := mask.Bounds()
 	for z := int32(0); z < h; z++ {
 		for x := int32(0); x < w; x++ {
@@ -171,8 +149,8 @@ func (sec *Section) CheckMask(x0, z0 int32, mask Mask) (count int) {
 }
 
 func secIdx(x, z int32) int {
-	assert(x < SectionSize, "x out of range")
-	assert(z < SectionSize, "z out of range")
+	util.Assert(x < SectionSize, "x out of range")
+	util.Assert(z < SectionSize, "z out of range")
 	return int(SectionSize*z + x)
 }
 

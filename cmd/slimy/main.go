@@ -12,9 +12,10 @@ import (
 	"strconv"
 
 	"github.com/vktec/slimy"
+	"github.com/vktec/slimy/cpu"
 )
 
-func formatCSV(results []slimy.SearchResult) error {
+func formatCSV(results []slimy.Result) error {
 	if _, err := fmt.Println("Center Chunk X,Center Chunk Z,Slime Chunk Count"); err != nil {
 		return err
 	}
@@ -26,11 +27,11 @@ func formatCSV(results []slimy.SearchResult) error {
 	return nil
 }
 
-func formatJSON(results []slimy.SearchResult) error {
+func formatJSON(results []slimy.Result) error {
 	return json.NewEncoder(os.Stdout).Encode(results)
 }
 
-func formatHuman(results []slimy.SearchResult) error {
+func formatHuman(results []slimy.Result) error {
 	for _, result := range results {
 		if _, err := fmt.Printf("(%6d, %6d) %3d chunks\n", result.X, result.Z, result.Count); err != nil {
 			return err
@@ -86,7 +87,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	var fmter func([]slimy.SearchResult) error
+	var fmter func([]slimy.Result) error
 	switch *outputFormat {
 	case "csv":
 		fmter = formatCSV
@@ -99,8 +100,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	mask := slimy.Mask{ORad: 8, IRad: 1}
-	world := slimy.World(seed)
+	mask := cpu.Mask{ORad: 8, IRad: 1}
+	world := cpu.World(seed)
 	if *drawFile != "" {
 		// TODO: don't require threshold
 		img := image.NewRGBA(image.Rectangle{
