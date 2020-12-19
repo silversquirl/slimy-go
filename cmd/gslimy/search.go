@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"image"
-	"time"
 	"unsafe"
 
 	"github.com/go-gl/gl/v4.3-core/gl"
@@ -79,7 +77,6 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	// TODO: search asynchronously or on a different thread so we don't block rendering
 	// TODO: split large searches into multiple batches
 
-	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
 	// Adjust search region so we scan all centres within the box rather than corners
 	x0 -= int32(s.MaskDim.X / 2)
 	x1 -= int32(s.MaskDim.X / 2)
@@ -106,14 +103,11 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, s.resultBuf)
 
 	// Execute shader
-	start := time.Now()
 	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.MaskDim.X), uint32(s.MaskDim.Y), 1)
 	gl.MemoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT | gl.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results
 	gl.GetBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, 4, gl.Ptr(&resultCountVal))
-	end := time.Now()
-	fmt.Printf("Search finished in %s\n", end.Sub(start))
 	if resultCountVal > 0 {
 		gpuResults := make([]gpuResult, resultCountVal)
 		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, len(gpuResults)*int(unsafe.Sizeof(gpuResults[0])), gl.Ptr(gpuResults))
@@ -134,14 +128,8 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 			results[i] = res
 		}
 
-		fmt.Printf("%d results:\n", len(results))
-		for _, res := range results {
-			fmt.Printf("  (%4d, %4d)  %d\n", res.X, res.Z, res.Count)
-		}
-
 		return results
 	} else {
-		fmt.Println("No results")
 		return nil
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"image"
 	"log"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -128,34 +130,6 @@ func (app *App) SetUniforms() {
 	gl.Uniform2i(1, app.w, app.h)
 }
 
-type Result struct {
-	X, Z  int32
-	Count uint
-}
-
-func (a Result) OrderBefore(b Result) bool {
-	// Sort by count
-	if a.Count != b.Count {
-		return a.Count > b.Count
-	}
-
-	// Then by distance from 0,0
-	aD2 := a.X*a.X + a.Z*a.Z
-	bD2 := b.X*b.X + b.Z*b.Z
-	if aD2 != bD2 {
-		return aD2 < bD2
-	}
-
-	// Then finally break ties by coordinate
-	if a.X != b.X {
-		return a.X < b.X
-	}
-	if a.Z != b.Z {
-		return a.Z < b.Z
-	}
-	return false
-}
-
 // TODO: allow more than this arbitrary limit
 // >1mil results is probably fine for now tho, unless someone searches with stupidly relaxed requirements
 const maxResults = 1 << 20
@@ -226,7 +200,7 @@ func (app *App) MouseButton(_ *glfw.Window, btn glfw.MouseButton, act glfw.Actio
 	} else if btn == glfw.MouseButtonMiddle && act == glfw.Press {
 		x0, z0 := app.coord(0, app.h)
 		x1, z1 := app.coord(app.w, 0)
-		app.results = app.s.Search(x0, z0, x1, z1, app.threshold, app.worldSeed)
+		app.results = runSearch(app.s, x0, z0, x1, z1, app.threshold, app.worldSeed)
 		app.Damage()
 	} else if btn == glfw.MouseButtonRight && act == glfw.Press {
 		if len(app.results) > 0 {
@@ -249,6 +223,59 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 	gl.Viewport(0, 0, int32(w), int32(h))
 	app.w, app.h = int32(w), int32(h)
 	app.Damage()
+}
+
+func runSearch(s *Searcher, x0, z0, x1, z1 int32, threshold int, worldSeed int64) (results []Result) {
+	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
+	start := time.Now()
+	results = s.Search(x0, z0, x1, z1, threshold, worldSeed)
+	end := time.Now()
+	fmt.Printf("Search finished in %s\n", end.Sub(start))
+	Report(results)
+	return
+}
+
+func Report(results []Result) {
+	if len(results) > 0 {
+		if len(results) == 1 {
+			fmt.Println("1 result:")
+		} else {
+			fmt.Println(len(results), "results:")
+		}
+		for _, res := range results {
+			fmt.Printf("  (%4d, %4d)  %d\n", res.X, res.Z, res.Count)
+		}
+	} else {
+		fmt.Println("No results")
+	}
+}
+
+type Result struct {
+	X, Z  int32
+	Count uint
+}
+
+func (a Result) OrderBefore(b Result) bool {
+	// Sort by count
+	if a.Count != b.Count {
+		return a.Count > b.Count
+	}
+
+	// Then by distance from 0,0
+	aD2 := a.X*a.X + a.Z*a.Z
+	bD2 := b.X*b.X + b.Z*b.Z
+	if aD2 != bD2 {
+		return aD2 < bD2
+	}
+
+	// Then finally break ties by coordinate
+	if a.X != b.X {
+		return a.X < b.X
+	}
+	if a.Z != b.Z {
+		return a.Z < b.Z
+	}
+	return false
 }
 
 func parsePos(s string) (pos [2]int, err error) {
@@ -310,7 +337,7 @@ func main() {
 		}
 		defer s.Destroy()
 		r := int(*search)
-		s.Search(
+		runSearch(s,
 			int32(centerPos[0]-r), int32(centerPos[1]-r),
 			int32(centerPos[0]+r), int32(centerPos[1]+r),
 			int(*threshold), *seed,
