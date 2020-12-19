@@ -20,6 +20,8 @@ import (
 	"github.com/go-gl/gl/v4.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/vktec/slimy"
+	"github.com/vktec/slimy/gpu"
+	"github.com/vktec/slimy/util"
 )
 
 func init() {
@@ -32,7 +34,7 @@ type App struct {
 
 	win *glfw.Window
 	vao uint32
-	s   *Searcher
+	s   *gpu.Searcher
 
 	slimeProg uint32
 	maskProg  uint32
@@ -67,7 +69,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	}
 
 	app.activate()
-	gl.DebugMessageCallback(debugMsg, nil)
+	gl.DebugMessageCallback(gpu.DebugMsg, nil)
 	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
@@ -78,17 +80,17 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	gl.CreateVertexArrays(1, &app.vao)
 	gl.BindVertexArray(app.vao)
 
-	app.slimeProg, err = buildShader(fsVert, slimeFrag)
+	app.slimeProg, err = gpu.BuildShader(fsVert, slimeFrag)
 	if err != nil {
 		return nil, err
 	}
 
-	app.maskProg, err = buildShader(fsVert, maskFrag)
+	app.maskProg, err = gpu.BuildShader(fsVert, maskFrag)
 	if err != nil {
 		return nil, err
 	}
 
-	app.gridProg, err = buildShader(fsVert, gridFrag)
+	app.gridProg, err = gpu.BuildShader(fsVert, gridFrag)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +101,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	app.win.SetRefreshCallback(app.Refresh)
 	app.win.SetSizeCallback(app.Resize)
 
-	app.s, err = NewSearcher(app.win, maskImg)
+	app.s, err = gpu.NewSearcher(app.win, maskImg)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +224,7 @@ func (app *App) Resize(_ *glfw.Window, w, h int) {
 	app.Damage()
 }
 
-func runSearch(s *Searcher, x0, z0, x1, z1 int32, threshold int, worldSeed int64) (results []slimy.Result) {
+func runSearch(s *gpu.Searcher, x0, z0, x1, z1 int32, threshold int, worldSeed int64) (results []slimy.Result) {
 	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
 	start := time.Now()
 	results = s.Search(x0, z0, x1, z1, threshold, worldSeed)
@@ -276,7 +278,7 @@ func main() {
 
 	var maskImg image.Image
 	if *mask == "" {
-		maskImg = genDonut(1, 8)
+		maskImg = util.GenDonut(1, 8)
 	} else {
 		f, err := os.Open(*mask)
 		if err != nil {
@@ -300,7 +302,7 @@ func main() {
 	defer glfw.Terminate()
 
 	if *search > 0 {
-		s, err := NewSearcher(nil, maskImg)
+		s, err := gpu.NewSearcher(nil, maskImg)
 		if err != nil {
 			log.Fatal(err)
 		}

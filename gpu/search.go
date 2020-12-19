@@ -1,4 +1,4 @@
-package main
+package gpu
 
 import (
 	"image"
@@ -33,9 +33,9 @@ func NewSearcher(shareWith *glfw.Window, mask image.Image) (s *Searcher, err err
 	}
 
 	s.activate()
-	gl.DebugMessageCallback(debugMsg, nil)
+	gl.DebugMessageCallback(DebugMsg, nil)
 
-	s.prog, err = buildComputeShader(searchComp)
+	s.prog, err = BuildComputeShader(searchComp)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func NewSearcher(shareWith *glfw.Window, mask image.Image) (s *Searcher, err err
 	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
 	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
 	gl.TexParameterfv(gl.TEXTURE_RECTANGLE, gl.TEXTURE_BORDER_COLOR, &[]float32{0, 0, 0, 1}[0])
-	uploadMask(gl.TEXTURE_RECTANGLE, mask)
+	UploadMask(gl.TEXTURE_RECTANGLE, mask)
 	gl.BindTexture(gl.TEXTURE_RECTANGLE, 0)
 
 	// TODO: try out other usage combinations including STREAM, DRAW and READ

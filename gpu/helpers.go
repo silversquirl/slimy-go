@@ -1,10 +1,9 @@
-package main
+package gpu
 
 import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
 	"log"
 	"strings"
 	"unsafe"
@@ -12,7 +11,7 @@ import (
 	"github.com/go-gl/gl/v4.3-core/gl"
 )
 
-func getShaderError(thing uint32, ivFunc func(thing, pname uint32, params *int32), logFunc func(thing uint32, bufSize int32, length *int32, infoLog *uint8)) error {
+func GetShaderError(thing uint32, ivFunc func(thing, pname uint32, params *int32), logFunc func(thing uint32, bufSize int32, length *int32, infoLog *uint8)) error {
 	var bufSize int32
 	ivFunc(thing, gl.INFO_LOG_LENGTH, &bufSize)
 
@@ -28,7 +27,7 @@ func getShaderError(thing uint32, ivFunc func(thing, pname uint32, params *int32
 		return errors.New("No error message")
 	}
 }
-func compileShader(shad uint32, source string) error {
+func CompileShader(shad uint32, source string) error {
 	csrc, free := gl.Strs(source)
 	clen := int32(len(source))
 	gl.ShaderSource(shad, 1, csrc, &clen)
@@ -39,17 +38,17 @@ func compileShader(shad uint32, source string) error {
 	gl.GetShaderiv(shad, gl.COMPILE_STATUS, &result)
 	if result == 0 {
 		defer gl.DeleteShader(shad)
-		return getShaderError(shad, gl.GetShaderiv, gl.GetShaderInfoLog)
+		return GetShaderError(shad, gl.GetShaderiv, gl.GetShaderInfoLog)
 	}
 	return nil
 }
-func buildShader(vert, frag string) (prog uint32, err error) {
+func BuildShader(vert, frag string) (prog uint32, err error) {
 	vshad := gl.CreateShader(gl.VERTEX_SHADER)
-	if err := compileShader(vshad, vert); err != nil {
+	if err := CompileShader(vshad, vert); err != nil {
 		return 0, err
 	}
 	fshad := gl.CreateShader(gl.FRAGMENT_SHADER)
-	if err := compileShader(fshad, frag); err != nil {
+	if err := CompileShader(fshad, frag); err != nil {
 		return 0, err
 	}
 
@@ -64,13 +63,13 @@ func buildShader(vert, frag string) (prog uint32, err error) {
 	gl.GetProgramiv(prog, gl.LINK_STATUS, &result)
 	if result == 0 {
 		defer gl.DeleteProgram(prog)
-		return 0, getShaderError(prog, gl.GetProgramiv, gl.GetProgramInfoLog)
+		return 0, GetShaderError(prog, gl.GetProgramiv, gl.GetProgramInfoLog)
 	}
 	return prog, nil
 }
-func buildComputeShader(source string) (prog uint32, err error) {
+func BuildComputeShader(source string) (prog uint32, err error) {
 	shad := gl.CreateShader(gl.COMPUTE_SHADER)
-	if err := compileShader(shad, source); err != nil {
+	if err := CompileShader(shad, source); err != nil {
 		return 0, err
 	}
 
@@ -83,26 +82,12 @@ func buildComputeShader(source string) (prog uint32, err error) {
 	gl.GetProgramiv(prog, gl.LINK_STATUS, &result)
 	if result == 0 {
 		defer gl.DeleteProgram(prog)
-		return 0, getShaderError(prog, gl.GetProgramiv, gl.GetProgramInfoLog)
+		return 0, GetShaderError(prog, gl.GetProgramiv, gl.GetProgramInfoLog)
 	}
 	return prog, nil
 }
 
-func genDonut(innerRad, outerRad int) image.Image {
-	dim := image.Rectangle{image.Point{-outerRad, -outerRad}, image.Point{outerRad + 1, outerRad + 1}}
-	img := image.NewAlpha(dim)
-	for y := dim.Min.Y; y < dim.Max.Y; y++ {
-		for x := dim.Min.X; x < dim.Max.X; x++ {
-			var a uint8
-			if innerRad*innerRad < x*x+y*y && x*x+y*y <= outerRad*outerRad {
-				a = 255
-			}
-			img.SetAlpha(x, y, color.Alpha{a})
-		}
-	}
-	return img
-}
-func uploadMask(target uint32, img image.Image) {
+func UploadMask(target uint32, img image.Image) {
 	dim := img.Bounds().Canon()
 	data := make([][4]uint8, dim.Dx()*dim.Dy())
 	for y := dim.Min.Y; y < dim.Max.Y; y++ {
@@ -118,7 +103,7 @@ func uploadMask(target uint32, img image.Image) {
 	gl.TexImage2D(target, 0, gl.R8, int32(dim.Dx()), int32(dim.Dy()), 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(data))
 }
 
-func debugMsg(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
+func DebugMsg(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
 	var sourceStr, typeStr, severityStr string
 
 	switch source {
