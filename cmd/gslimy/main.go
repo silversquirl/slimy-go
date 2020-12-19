@@ -3,17 +3,13 @@ package main
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"image"
 	"log"
 	"math"
 	"os"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
-	"time"
-	"unsafe"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -32,14 +28,12 @@ type App struct {
 	threshold int
 
 	win *glfw.Window
+	vao uint32
+	s   *Searcher
 
-	vao        uint32
-	maskTex    uint32
-	maskDim    image.Point
-	slimeProg  uint32
-	maskProg   uint32
-	gridProg   uint32
-	searchProg uint32
+	slimeProg uint32
+	maskProg  uint32
+	gridProg  uint32
 
 	results []Result
 	damaged bool
@@ -64,16 +58,12 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
-	glfw.WindowHint(glfw.Visible, glfw.False)
 	app.win, err = glfw.CreateWindow(800, 600, "Slimy", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	app.win.MakeContextCurrent()
-	if err = gl.Init(); err != nil {
-		return nil, err
-	}
+	app.activate()
 	gl.DebugMessageCallback(debugMsg, nil)
 	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
 	gl.Enable(gl.BLEND)
@@ -100,24 +90,16 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 		return nil, err
 	}
 
-	app.searchProg, err = buildComputeShader(searchComp)
-	if err != nil {
-		return nil, err
-	}
-
-	app.maskDim = maskImg.Bounds().Canon().Size()
-	gl.GenTextures(1, &app.maskTex)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
-	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
-	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
-	gl.TexParameterfv(gl.TEXTURE_RECTANGLE, gl.TEXTURE_BORDER_COLOR, &[]float32{0, 0, 0, 1}[0])
-	uploadMask(gl.TEXTURE_RECTANGLE, maskImg)
-
 	app.win.SetCursorPosCallback(app.CursorPos)
 	app.win.SetMouseButtonCallback(app.MouseButton)
 	app.win.SetScrollCallback(app.Scroll)
 	app.win.SetRefreshCallback(app.Refresh)
 	app.win.SetSizeCallback(app.Resize)
+
+	app.s, err = NewSearcher(app.win, maskImg)
+	if err != nil {
+		return nil, err
+	}
 
 	app.Damage()
 	return app, nil
@@ -127,8 +109,14 @@ func (app *App) Destroy() {
 	app.win.Destroy()
 }
 
+func (app *App) activate() {
+	app.win.MakeContextCurrent()
+	if err := gl.Init(); err != nil {
+		panic(err)
+	}
+}
+
 func (app *App) Main() {
-	app.win.Show()
 	for !app.win.ShouldClose() {
 		app.Draw()
 		glfw.WaitEvents()
@@ -141,16 +129,28 @@ func (app *App) SetUniforms() {
 }
 
 type Result struct {
-	X, Z     int32
-	Count, _ uint32
+	X, Z  int32
+	Count uint
 }
 
 func (a Result) OrderBefore(b Result) bool {
+	// Sort by count
 	if a.Count != b.Count {
 		return a.Count > b.Count
-	} else if a.X != b.X {
+	}
+
+	// Then by distance from 0,0
+	aD2 := a.X*a.X + a.Z*a.Z
+	bD2 := b.X*b.X + b.Z*b.Z
+	if aD2 != bD2 {
+		return aD2 < bD2
+	}
+
+	// Then finally break ties by coordinate
+	if a.X != b.X {
 		return a.X < b.X
-	} else if a.Z != b.Z {
+	}
+	if a.Z != b.Z {
 		return a.Z < b.Z
 	}
 	return false
@@ -159,69 +159,6 @@ func (a Result) OrderBefore(b Result) bool {
 // TODO: allow more than this arbitrary limit
 // >1mil results is probably fine for now tho, unless someone searches with stupidly relaxed requirements
 const maxResults = 1 << 20
-
-func (app *App) RunSearch(x0, z0, x1, z1 int32) {
-	// TODO: search asynchronously or on a different thread so we don't block rendering
-
-	fmt.Printf("Searching (%d, %d) to (%d, %d)\n", x0, z0, x1, z1)
-	// Adjust search region so we scan all centres within the box rather than corners
-	x0 -= int32(app.maskDim.X / 2)
-	x1 -= int32(app.maskDim.X / 2)
-	z0 -= int32(app.maskDim.Y / 2)
-	z1 -= int32(app.maskDim.Y / 2)
-
-	gl.UseProgram(app.searchProg)
-	gl.Uniform2i(0, x0, z0)
-	gl.Uniform1i64ARB(1, app.worldSeed)
-	gl.Uniform1ui(2, uint32(app.threshold))
-
-	gl.ActiveTexture(gl.TEXTURE0)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
-
-	// TODO: try out other usage combinations including STREAM, DRAW and READ
-	var resultCount, results uint32
-	gl.GenBuffers(1, &resultCount)
-	gl.BindBuffer(gl.ATOMIC_COUNTER_BUFFER, resultCount)
-	var resultCountVal uint32
-	gl.BufferData(gl.ATOMIC_COUNTER_BUFFER, 4, gl.Ptr(&resultCountVal), gl.DYNAMIC_COPY)
-	gl.BindBufferBase(gl.ATOMIC_COUNTER_BUFFER, 0, resultCount)
-
-	gl.GenBuffers(1, &results)
-	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, results)
-	gl.BufferData(gl.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gl.DYNAMIC_COPY)
-	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, results)
-
-	// Execute shader
-	start := time.Now()
-	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(app.maskDim.X), uint32(app.maskDim.Y), 1)
-	gl.MemoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT | gl.SHADER_STORAGE_BARRIER_BIT)
-
-	// Load results
-	gl.GetBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, 4, gl.Ptr(&resultCountVal))
-	end := time.Now()
-	fmt.Printf("Search finished in %s\n", end.Sub(start))
-	if resultCountVal > 0 {
-		app.results = make([]Result, resultCountVal)
-		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, int(unsafe.Sizeof(Result{})*uintptr(resultCountVal)), gl.Ptr(app.results))
-
-		sort.Slice(app.results, func(i, j int) bool {
-			return app.results[i].OrderBefore(app.results[j])
-		})
-
-		fmt.Printf("%d results:\n", len(app.results))
-		for i := range app.results {
-			app.results[i].X += x0
-			app.results[i].Z += z0
-			fmt.Printf("  (%4d, %4d)  %d\n",
-				app.results[i].X+int32(app.maskDim.X/2),
-				app.results[i].Z+int32(app.maskDim.Y/2),
-				app.results[i].Count)
-		}
-	} else {
-		fmt.Println("No results")
-		app.results = nil
-	}
-}
 
 func (app *App) Damage() {
 	app.damaged = true
@@ -232,6 +169,7 @@ func (app *App) Draw() {
 	}
 	app.damaged = false
 
+	app.activate()
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 
 	gl.UseProgram(app.slimeProg)
@@ -247,8 +185,10 @@ func (app *App) Draw() {
 		gl.UseProgram(app.maskProg)
 		app.SetUniforms()
 		gl.ActiveTexture(gl.TEXTURE0)
-		gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
-		gl.Uniform2i(2, app.results[0].X, app.results[0].Z)
+		gl.BindTexture(gl.TEXTURE_RECTANGLE, app.s.MaskTex)
+		px := app.results[0].X - int32(app.s.MaskDim.X/2)
+		pz := app.results[0].Z - int32(app.s.MaskDim.Y/2)
+		gl.Uniform2i(2, px, pz)
 		gl.DrawArrays(gl.TRIANGLES, 0, 3)
 	}
 
@@ -286,7 +226,7 @@ func (app *App) MouseButton(_ *glfw.Window, btn glfw.MouseButton, act glfw.Actio
 	} else if btn == glfw.MouseButtonMiddle && act == glfw.Press {
 		x0, z0 := app.coord(0, app.h)
 		x1, z1 := app.coord(app.w, 0)
-		app.RunSearch(x0, z0, x1, z1)
+		app.results = app.s.Search(x0, z0, x1, z1, app.threshold, app.worldSeed)
 		app.Damage()
 	} else if btn == glfw.MouseButtonRight && act == glfw.Press {
 		if len(app.results) > 0 {
@@ -363,19 +303,24 @@ func main() {
 	}
 	defer glfw.Terminate()
 
-	app, err := NewApp(*seed, int(*threshold), centerPos, maskImg, *vsync)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer app.Destroy()
-
 	if *search > 0 {
+		s, err := NewSearcher(nil, maskImg)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer s.Destroy()
 		r := int(*search)
-		app.RunSearch(
+		s.Search(
 			int32(centerPos[0]-r), int32(centerPos[1]-r),
 			int32(centerPos[0]+r), int32(centerPos[1]+r),
+			int(*threshold), *seed,
 		)
 	} else {
+		app, err := NewApp(*seed, int(*threshold), centerPos, maskImg, *vsync)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer app.Destroy()
 		app.Main()
 	}
 }
