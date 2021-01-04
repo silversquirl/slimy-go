@@ -6,36 +6,24 @@ import (
 
 	"github.com/go-gl/gl/v4.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/vktec/glhl"
 	"github.com/vktec/slimy"
 )
 
 type Searcher struct {
-	win  *glfw.Window
+	ctx  glhl.Context
 	prog uint32
 
-	MaskTex   uint32
-	MaskDim   image.Point
+	maskTex   uint32
+	maskDim   image.Point
 	countBuf  uint32
 	resultBuf uint32
 }
 
-func NewSearcher(shareWith *glfw.Window, mask image.Image) (s *Searcher, err error) {
-	s = &Searcher{}
+func NewSearcher(mask image.Image) (*Searcher, error) {
+	ctx, err := glhl.NewContext(4, 3, glhl.Core|glhl.Debug)
 
-	if err := glfw.Init(); err != nil {
-		return nil, err
-	}
-
-	glfw.WindowHint(glfw.ContextVersionMajor, 4)
-	glfw.WindowHint(glfw.ContextVersionMinor, 3)
-	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
-	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
-	glfw.WindowHint(glfw.Visible, glfw.False)
-	s.win, err = glfw.CreateWindow(1, 1, "slimy GPU search", nil, shareWith)
-	if err != nil {
-		return nil, err
-	}
-
+	s := &Searcher{ctx: ctx}
 	s.activate()
 	gl.DebugMessageCallback(DebugMsg, nil)
 
@@ -44,14 +32,8 @@ func NewSearcher(shareWith *glfw.Window, mask image.Image) (s *Searcher, err err
 		return nil, err
 	}
 
-	s.MaskDim = mask.Bounds().Canon().Size()
-	gl.GenTextures(1, &s.MaskTex)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, s.MaskTex)
-	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
-	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
-	gl.TexParameterfv(gl.TEXTURE_RECTANGLE, gl.TEXTURE_BORDER_COLOR, &[]float32{0, 0, 0, 1}[0])
-	UploadMask(gl.TEXTURE_RECTANGLE, mask)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, 0)
+	s.maskDim = mask.Bounds().Canon().Size()
+	s.maskTex = UploadMask(mask)
 
 	// TODO: try out other usage combinations including STREAM, DRAW and READ
 	gl.GenBuffers(1, &s.countBuf)
@@ -65,16 +47,16 @@ func NewSearcher(shareWith *glfw.Window, mask image.Image) (s *Searcher, err err
 
 func (s *Searcher) Destroy() {
 	gl.DeleteProgram(s.prog)
-	gl.DeleteTextures(1, &s.MaskTex)
+	gl.DeleteTextures(1, &s.maskTex)
 	gl.DeleteBuffers(1, &s.countBuf)
 	gl.DeleteBuffers(1, &s.resultBuf)
-	s.win.Destroy()
+	s.ctx.Destroy()
 	glfw.Terminate()
 }
 
 func (s *Searcher) activate() {
-	s.win.MakeContextCurrent()
-	if err := gl.Init(); err != nil {
+	s.ctx.MakeContextCurrent()
+	if err := gl.InitWithProcAddrFunc(glhl.GetProcAddr); err != nil {
 		panic(err)
 	}
 }
@@ -88,10 +70,10 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	// TODO: split large searches into multiple batches
 
 	// Adjust search region so we scan all centres within the box rather than corners
-	x0 -= int32(s.MaskDim.X / 2)
-	x1 -= int32(s.MaskDim.X / 2)
-	z0 -= int32(s.MaskDim.Y / 2)
-	z1 -= int32(s.MaskDim.Y / 2)
+	x0 -= int32(s.maskDim.X / 2)
+	x1 -= int32(s.maskDim.X / 2)
+	z0 -= int32(s.maskDim.Y / 2)
+	z1 -= int32(s.maskDim.Y / 2)
 
 	s.activate()
 	gl.UseProgram(s.prog)
@@ -100,7 +82,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	gl.Uniform1ui(2, uint32(threshold))
 
 	gl.ActiveTexture(gl.TEXTURE0)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, s.MaskTex)
+	gl.BindTexture(gl.TEXTURE_RECTANGLE, s.maskTex)
 
 	gl.BindBuffer(gl.ATOMIC_COUNTER_BUFFER, s.countBuf)
 	defer gl.BindBuffer(gl.ATOMIC_COUNTER_BUFFER, 0)
@@ -113,7 +95,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, s.resultBuf)
 
 	// Execute shader
-	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.MaskDim.X), uint32(s.MaskDim.Y), 1)
+	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.maskDim.X), uint32(s.maskDim.Y), 1)
 	gl.MemoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT | gl.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results
@@ -123,7 +105,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, len(gpuResults)*int(unsafe.Sizeof(gpuResults[0])), gl.Ptr(gpuResults))
 
 		results := make([]slimy.Result, len(gpuResults))
-		centerOffX, centerOffZ := int32(s.MaskDim.X/2), int32(s.MaskDim.Y/2)
+		centerOffX, centerOffZ := int32(s.maskDim.X/2), int32(s.maskDim.Y/2)
 		for i, gpuRes := range gpuResults {
 			res := slimy.Result{
 				x0 + int32(gpuRes.xoff) + centerOffX,

@@ -146,7 +146,7 @@ func main() {
 		var searcher slimy.Searcher
 		switch *method {
 		case "gpu":
-			searcher, err = gpu.NewSearcher(nil, maskImg)
+			searcher, err = gpu.NewSearcher(maskImg)
 		case "cpu":
 			searcher, err = cpu.NewSearcher(*workerCount, cpu.Mask{ORad: 8, IRad: 1})
 		}

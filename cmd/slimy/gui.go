@@ -30,6 +30,8 @@ type App struct {
 	slimeProg uint32
 	maskProg  uint32
 	gridProg  uint32
+	maskTex   uint32
+	maskDim   image.Point
 
 	results []slimy.Result
 	damaged bool
@@ -56,6 +58,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
+	glfw.WindowHint(glfw.ContextCreationAPI, glfw.EGLContextAPI)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
 	app.win, err = glfw.CreateWindow(800, 600, "Slimy", nil, nil)
@@ -90,13 +93,16 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 		return nil, err
 	}
 
+	app.maskDim = maskImg.Bounds().Canon().Size()
+	app.maskTex = gpu.UploadMask(maskImg)
+
 	app.win.SetCursorPosCallback(app.CursorPos)
 	app.win.SetMouseButtonCallback(app.MouseButton)
 	app.win.SetScrollCallback(app.Scroll)
 	app.win.SetRefreshCallback(app.Refresh)
 	app.win.SetSizeCallback(app.Resize)
 
-	app.s, err = gpu.NewSearcher(app.win, maskImg)
+	app.s, err = gpu.NewSearcher(maskImg)
 	if err != nil {
 		return nil, err
 	}
@@ -154,9 +160,9 @@ func (app *App) Draw() {
 		gl.UseProgram(app.maskProg)
 		app.SetUniforms()
 		gl.ActiveTexture(gl.TEXTURE0)
-		gl.BindTexture(gl.TEXTURE_RECTANGLE, app.s.MaskTex)
-		px := app.results[0].X - int32(app.s.MaskDim.X/2)
-		pz := app.results[0].Z - int32(app.s.MaskDim.Y/2)
+		gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
+		px := app.results[0].X - int32(app.maskDim.X/2)
+		pz := app.results[0].Z - int32(app.maskDim.Y/2)
 		gl.Uniform2i(2, px, pz)
 		gl.DrawArrays(gl.TRIANGLES, 0, 3)
 	}

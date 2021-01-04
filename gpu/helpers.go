@@ -87,7 +87,13 @@ func BuildComputeShader(source string) (prog uint32, err error) {
 	return prog, nil
 }
 
-func UploadMask(target uint32, img image.Image) {
+func UploadMask(img image.Image) (tex uint32) {
+	gl.GenTextures(1, &tex)
+	gl.BindTexture(gl.TEXTURE_RECTANGLE, tex)
+	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
+	gl.TexParameteri(gl.TEXTURE_RECTANGLE, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
+	gl.TexParameterfv(gl.TEXTURE_RECTANGLE, gl.TEXTURE_BORDER_COLOR, &[]float32{0, 0, 0, 1}[0])
+
 	dim := img.Bounds().Canon()
 	data := make([][4]uint8, dim.Dx()*dim.Dy())
 	for y := dim.Min.Y; y < dim.Max.Y; y++ {
@@ -100,7 +106,10 @@ func UploadMask(target uint32, img image.Image) {
 			}
 		}
 	}
-	gl.TexImage2D(target, 0, gl.R8, int32(dim.Dx()), int32(dim.Dy()), 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(data))
+	gl.TexImage2D(gl.TEXTURE_RECTANGLE, 0, gl.R8, int32(dim.Dx()), int32(dim.Dy()), 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(data))
+
+	gl.BindTexture(gl.TEXTURE_RECTANGLE, 0)
+	return tex
 }
 
 func DebugMsg(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
