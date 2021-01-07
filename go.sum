@@ -5,3 +5,5 @@ github.com/go-gl/glfw/v3.3/glfw v0.0.0-20201108214237-06ea97f0c265 h1:BcbKYUZo/T
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20201108214237-06ea97f0c265/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/vktec/glhl v0.0.0-20210104134333-f8f2d5982709 h1:fEcNIy+IziQqZhsrEnWK4I1M701RL+ABTYgt9e/QX2o=
 github.com/vktec/glhl v0.0.0-20210104134333-f8f2d5982709/go.mod h1:a/o06yKoeH5vvnZAGGwW7nO5O9x2kUhbO7qyuc0xy1c=
+github.com/vktec/glhl v0.0.0-20210105224823-da197a287fde h1:TEPWPX2pmzJey3cTU3qOta0t7RQL4bXm5YOOxtUKFDo=
+github.com/vktec/glhl v0.0.0-20210105224823-da197a287fde/go.mod h1:a/o06yKoeH5vvnZAGGwW7nO5O9x2kUhbO7qyuc0xy1c=
