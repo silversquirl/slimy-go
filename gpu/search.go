@@ -4,13 +4,15 @@ import (
 	"image"
 	"unsafe"
 
-	"github.com/go-gl/gl/v4.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/vktec/gldebug"
 	"github.com/vktec/glhl"
+	"github.com/vktec/gll"
 	"github.com/vktec/slimy"
 )
 
 type Searcher struct {
+	gll.GL430
 	ctx  glhl.Context
 	prog uint32
 
@@ -25,40 +27,38 @@ func NewSearcher(mask image.Image) (*Searcher, error) {
 
 	s := &Searcher{ctx: ctx}
 	s.activate()
-	gl.DebugMessageCallback(DebugMsg, nil)
+	s.DebugMessageCallback(gldebug.MessageCallback)
 
-	s.prog, err = BuildComputeShader(searchComp)
+	s.prog, err = BuildComputeShader(s, searchComp)
 	if err != nil {
 		return nil, err
 	}
 
 	s.maskDim = mask.Bounds().Canon().Size()
-	s.maskTex = UploadMask(mask)
+	s.maskTex = UploadMask(s, mask)
 
 	// TODO: try out other usage combinations including STREAM, DRAW and READ
-	gl.GenBuffers(1, &s.countBuf)
-	gl.GenBuffers(1, &s.resultBuf)
-	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, s.resultBuf)
-	gl.BufferData(gl.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gl.DYNAMIC_COPY)
-	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, 0)
+	s.GenBuffers(1, &s.countBuf)
+	s.GenBuffers(1, &s.resultBuf)
+	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, s.resultBuf)
+	s.BufferData(gll.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gll.DYNAMIC_COPY)
+	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, 0)
 
 	return s, nil
 }
 
 func (s *Searcher) Destroy() {
-	gl.DeleteProgram(s.prog)
-	gl.DeleteTextures(1, &s.maskTex)
-	gl.DeleteBuffers(1, &s.countBuf)
-	gl.DeleteBuffers(1, &s.resultBuf)
+	s.DeleteProgram(s.prog)
+	s.DeleteTextures(1, &s.maskTex)
+	s.DeleteBuffers(1, &s.countBuf)
+	s.DeleteBuffers(1, &s.resultBuf)
 	s.ctx.Destroy()
 	glfw.Terminate()
 }
 
 func (s *Searcher) activate() {
 	s.ctx.MakeContextCurrent()
-	if err := gl.InitWithProcAddrFunc(glhl.GetProcAddr); err != nil {
-		panic(err)
-	}
+	s.GL430 = gll.New430(glhl.GetProcAddr)
 }
 
 // TODO: allow more than this arbitrary limit
@@ -76,33 +76,33 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	z1 -= int32(s.maskDim.Y / 2)
 
 	s.activate()
-	gl.UseProgram(s.prog)
-	gl.Uniform2i(0, x0, z0)
-	gl.Uniform1i64ARB(1, worldSeed)
-	gl.Uniform1ui(2, uint32(threshold))
+	s.UseProgram(s.prog)
+	s.Uniform2i(0, x0, z0)
+	s.Uniform1i64ARB(1, worldSeed)
+	s.Uniform1ui(2, uint32(threshold))
 
-	gl.ActiveTexture(gl.TEXTURE0)
-	gl.BindTexture(gl.TEXTURE_RECTANGLE, s.maskTex)
+	s.ActiveTexture(gll.TEXTURE0)
+	s.BindTexture(gll.TEXTURE_RECTANGLE, s.maskTex)
 
-	gl.BindBuffer(gl.ATOMIC_COUNTER_BUFFER, s.countBuf)
-	defer gl.BindBuffer(gl.ATOMIC_COUNTER_BUFFER, 0)
+	s.BindBuffer(gll.ATOMIC_COUNTER_BUFFER, s.countBuf)
+	defer s.BindBuffer(gll.ATOMIC_COUNTER_BUFFER, 0)
 	var resultCountVal uint32
-	gl.BufferData(gl.ATOMIC_COUNTER_BUFFER, 4, gl.Ptr(&resultCountVal), gl.DYNAMIC_COPY)
-	gl.BindBufferBase(gl.ATOMIC_COUNTER_BUFFER, 0, s.countBuf)
+	s.BufferData(gll.ATOMIC_COUNTER_BUFFER, 4, gll.Ptr(&resultCountVal), gll.DYNAMIC_COPY)
+	s.BindBufferBase(gll.ATOMIC_COUNTER_BUFFER, 0, s.countBuf)
 
-	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, s.resultBuf)
-	defer gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, 0)
-	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, s.resultBuf)
+	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, s.resultBuf)
+	defer s.BindBuffer(gll.SHADER_STORAGE_BUFFER, 0)
+	s.BindBufferBase(gll.SHADER_STORAGE_BUFFER, 1, s.resultBuf)
 
 	// Execute shader
-	gl.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.maskDim.X), uint32(s.maskDim.Y), 1)
-	gl.MemoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT | gl.SHADER_STORAGE_BARRIER_BIT)
+	s.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.maskDim.X), uint32(s.maskDim.Y), 1)
+	s.MemoryBarrier(gll.ATOMIC_COUNTER_BARRIER_BIT | gll.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results
-	gl.GetBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, 4, gl.Ptr(&resultCountVal))
+	s.GetBufferSubData(gll.ATOMIC_COUNTER_BUFFER, 0, 4, gll.Ptr(&resultCountVal))
 	if resultCountVal > 0 {
 		gpuResults := make([]gpuResult, resultCountVal)
-		gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, len(gpuResults)*int(unsafe.Sizeof(gpuResults[0])), gl.Ptr(gpuResults))
+		s.GetBufferSubData(gll.SHADER_STORAGE_BUFFER, 0, len(gpuResults)*int(unsafe.Sizeof(gpuResults[0])), gll.Ptr(gpuResults))
 
 		results := make([]slimy.Result, len(gpuResults))
 		centerOffX, centerOffZ := int32(s.maskDim.X/2), int32(s.maskDim.Y/2)

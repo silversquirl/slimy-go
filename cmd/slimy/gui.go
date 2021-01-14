@@ -9,8 +9,9 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 
-	"github.com/go-gl/gl/v4.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/vktec/gldebug"
+	"github.com/vktec/gll"
 	"github.com/vktec/slimy"
 	"github.com/vktec/slimy/gpu"
 )
@@ -20,6 +21,8 @@ func init() {
 }
 
 type App struct {
+	gll.GL430
+
 	worldSeed int64
 	threshold int
 
@@ -67,34 +70,34 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	}
 
 	app.activate()
-	gl.DebugMessageCallback(gpu.DebugMsg, nil)
-	gl.ClearColor(0.1, 0.1, 0.1, 1.0)
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	app.DebugMessageCallback(gldebug.MessageCallback)
+	app.ClearColor(0.1, 0.1, 0.1, 1.0)
+	app.Enable(gll.BLEND)
+	app.BlendFunc(gll.SRC_ALPHA, gll.ONE_MINUS_SRC_ALPHA)
 	if !vsync {
 		glfw.SwapInterval(0)
 	}
 
-	gl.CreateVertexArrays(1, &app.vao)
-	gl.BindVertexArray(app.vao)
+	app.GenVertexArrays(1, &app.vao)
+	app.BindVertexArray(app.vao)
 
-	app.slimeProg, err = gpu.BuildShader(fsVert, slimeFrag)
+	app.slimeProg, err = gpu.BuildShader(app, fsVert, slimeFrag)
 	if err != nil {
 		return nil, err
 	}
 
-	app.maskProg, err = gpu.BuildShader(fsVert, maskFrag)
+	app.maskProg, err = gpu.BuildShader(app, fsVert, maskFrag)
 	if err != nil {
 		return nil, err
 	}
 
-	app.gridProg, err = gpu.BuildShader(fsVert, gridFrag)
+	app.gridProg, err = gpu.BuildShader(app, fsVert, gridFrag)
 	if err != nil {
 		return nil, err
 	}
 
 	app.maskDim = maskImg.Bounds().Canon().Size()
-	app.maskTex = gpu.UploadMask(maskImg)
+	app.maskTex = gpu.UploadMask(app, maskImg)
 
 	app.win.SetCursorPosCallback(app.CursorPos)
 	app.win.SetMouseButtonCallback(app.MouseButton)
@@ -118,9 +121,7 @@ func (app *App) Destroy() {
 
 func (app *App) activate() {
 	app.win.MakeContextCurrent()
-	if err := gl.Init(); err != nil {
-		panic(err)
-	}
+	app.GL430 = gll.New430(glfw.GetProcAddress)
 }
 
 func (app *App) Main() {
@@ -131,8 +132,8 @@ func (app *App) Main() {
 }
 
 func (app *App) SetUniforms() {
-	gl.Uniform3f(0, app.panX, app.panZ, app.zoom)
-	gl.Uniform2i(1, app.w, app.h)
+	app.Uniform3f(0, app.panX, app.panZ, app.zoom)
+	app.Uniform2i(1, app.w, app.h)
 }
 
 func (app *App) Damage() {
@@ -145,26 +146,26 @@ func (app *App) Draw() {
 	app.damaged = false
 
 	app.activate()
-	gl.Clear(gl.COLOR_BUFFER_BIT)
+	app.Clear(gll.COLOR_BUFFER_BIT)
 
-	gl.UseProgram(app.slimeProg)
+	app.UseProgram(app.slimeProg)
 	app.SetUniforms()
-	gl.Uniform1i64ARB(2, app.worldSeed)
-	gl.DrawArrays(gl.TRIANGLES, 0, 3)
+	app.Uniform1i64ARB(2, app.worldSeed)
+	app.DrawArrays(gll.TRIANGLES, 0, 3)
 
-	gl.UseProgram(app.gridProg)
+	app.UseProgram(app.gridProg)
 	app.SetUniforms()
-	gl.DrawArrays(gl.TRIANGLES, 0, 3)
+	app.DrawArrays(gll.TRIANGLES, 0, 3)
 
 	if len(app.results) > 0 {
-		gl.UseProgram(app.maskProg)
+		app.UseProgram(app.maskProg)
 		app.SetUniforms()
-		gl.ActiveTexture(gl.TEXTURE0)
-		gl.BindTexture(gl.TEXTURE_RECTANGLE, app.maskTex)
+		app.ActiveTexture(gll.TEXTURE0)
+		app.BindTexture(gll.TEXTURE_RECTANGLE, app.maskTex)
 		px := app.results[0].X - int32(app.maskDim.X/2)
 		pz := app.results[0].Z - int32(app.maskDim.Y/2)
-		gl.Uniform2i(2, px, pz)
-		gl.DrawArrays(gl.TRIANGLES, 0, 3)
+		app.Uniform2i(2, px, pz)
+		app.DrawArrays(gll.TRIANGLES, 0, 3)
 	}
 
 	app.win.SwapBuffers()
@@ -221,7 +222,7 @@ func (app *App) Refresh(_ *glfw.Window) {
 	app.Damage()
 }
 func (app *App) Resize(_ *glfw.Window, w, h int) {
-	gl.Viewport(0, 0, int32(w), int32(h))
+	app.Viewport(0, 0, int32(w), int32(h))
 	app.w, app.h = int32(w), int32(h)
 	app.Damage()
 }
