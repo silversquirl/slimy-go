@@ -3,7 +3,7 @@ package main
 import "github.com/vktec/slimy/gpu"
 
 const fsVert = `
-#version 430 core
+#version 330 core
 void main() {
 	float x = float((gl_VertexID & 1) << 2) - 1;
 	float y = float((gl_VertexID & 2) << 1) - 1;
@@ -12,7 +12,7 @@ void main() {
 `
 
 const slimeFrag = `
-#version 430 core
+#version 330 core
 #extension GL_ARB_gpu_shader_int64 : require
 layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
 layout(location = 1) uniform ivec2 dim; // dimensions of viewport
@@ -27,7 +27,7 @@ void main() {
 `
 
 const maskFrag = `
-#version 430 core
+#version 330 core
 layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
 layout(location = 1) uniform ivec2 dim; // dimensions of viewport
 layout(location = 2) uniform ivec2 origin;
@@ -41,7 +41,7 @@ void main() {
 `
 
 const gridFrag = `
-#version 430 core
+#version 330 core
 #extension GL_ARB_gpu_shader_int64 : require
 layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
 layout(location = 1) uniform ivec2 dim; // dimensions of viewport

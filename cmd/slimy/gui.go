@@ -21,7 +21,7 @@ func init() {
 }
 
 type App struct {
-	gll.GL430
+	gll.GL330
 
 	worldSeed int64
 	threshold int
@@ -59,7 +59,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 		return nil, err
 	}
 
-	glfw.WindowHint(glfw.ContextVersionMajor, 4)
+	glfw.WindowHint(glfw.ContextVersionMajor, 3)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.ContextCreationAPI, glfw.EGLContextAPI)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
@@ -70,7 +70,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	}
 
 	app.activate()
-	app.DebugMessageCallback(gldebug.MessageCallback)
+	app.DebugMessageCallbackARB(gldebug.MessageCallback)
 	app.ClearColor(0.1, 0.1, 0.1, 1.0)
 	app.Enable(gll.BLEND)
 	app.BlendFunc(gll.SRC_ALPHA, gll.ONE_MINUS_SRC_ALPHA)
@@ -121,7 +121,7 @@ func (app *App) Destroy() {
 
 func (app *App) activate() {
 	app.win.MakeContextCurrent()
-	app.GL430 = gll.New430(glfw.GetProcAddress)
+	app.GL330 = gll.New330(glfw.GetProcAddress)
 }
 
 func (app *App) Main() {
