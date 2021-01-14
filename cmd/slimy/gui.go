@@ -21,7 +21,7 @@ func init() {
 }
 
 type App struct {
-	gll.GL330
+	gll.GL420
 
 	worldSeed int64
 	threshold int
@@ -30,11 +30,16 @@ type App struct {
 	vao uint32
 	s   *gpu.Searcher
 
+	useInt64  bool
 	slimeProg uint32
 	maskProg  uint32
 	gridProg  uint32
 	maskTex   uint32
 	maskDim   image.Point
+
+	uSlimeView, uSlimeDim, uSlimeWorldSeed, uSlimeWorldSeedV int32
+	uMaskView, uMaskDim, uMaskOrigin                         int32
+	uGridView, uGridDim                                      int32
 
 	results []slimy.Result
 	damaged bool
@@ -59,8 +64,8 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 		return nil, err
 	}
 
-	glfw.WindowHint(glfw.ContextVersionMajor, 3)
-	glfw.WindowHint(glfw.ContextVersionMinor, 3)
+	glfw.WindowHint(glfw.ContextVersionMajor, 4)
+	glfw.WindowHint(glfw.ContextVersionMinor, 2)
 	glfw.WindowHint(glfw.ContextCreationAPI, glfw.EGLContextAPI)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
@@ -81,20 +86,30 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	app.GenVertexArrays(1, &app.vao)
 	app.BindVertexArray(app.vao)
 
+	app.useInt64 = gpu.ExtensionSupported(app, "GL_ARB_gpu_shader_int64")
 	app.slimeProg, err = gpu.BuildShader(app, fsVert, slimeFrag)
 	if err != nil {
 		return nil, err
 	}
+	app.uSlimeView = app.GetUniformLocation(app.slimeProg, gll.Str("view\000"))
+	app.uSlimeDim = app.GetUniformLocation(app.slimeProg, gll.Str("dim\000"))
+	app.uSlimeWorldSeed = app.GetUniformLocation(app.slimeProg, gll.Str("worldSeed\000"))
+	app.uSlimeWorldSeedV = app.GetUniformLocation(app.slimeProg, gll.Str("worldSeedV\000"))
 
 	app.maskProg, err = gpu.BuildShader(app, fsVert, maskFrag)
 	if err != nil {
 		return nil, err
 	}
+	app.uMaskView = app.GetUniformLocation(app.maskProg, gll.Str("view\000"))
+	app.uMaskDim = app.GetUniformLocation(app.maskProg, gll.Str("dim\000"))
+	app.uMaskOrigin = app.GetUniformLocation(app.maskProg, gll.Str("origin\000"))
 
 	app.gridProg, err = gpu.BuildShader(app, fsVert, gridFrag)
 	if err != nil {
 		return nil, err
 	}
+	app.uGridView = app.GetUniformLocation(app.gridProg, gll.Str("view\000"))
+	app.uGridDim = app.GetUniformLocation(app.gridProg, gll.Str("dim\000"))
 
 	app.maskDim = maskImg.Bounds().Canon().Size()
 	app.maskTex = gpu.UploadMask(app, maskImg)
@@ -121,7 +136,7 @@ func (app *App) Destroy() {
 
 func (app *App) activate() {
 	app.win.MakeContextCurrent()
-	app.GL330 = gll.New330(glfw.GetProcAddress)
+	app.GL420 = gll.New420(glfw.GetProcAddress)
 }
 
 func (app *App) Main() {
@@ -129,11 +144,6 @@ func (app *App) Main() {
 		app.Draw()
 		glfw.WaitEvents()
 	}
-}
-
-func (app *App) SetUniforms() {
-	app.Uniform3f(0, app.panX, app.panZ, app.zoom)
-	app.Uniform2i(1, app.w, app.h)
 }
 
 func (app *App) Damage() {
@@ -149,22 +159,30 @@ func (app *App) Draw() {
 	app.Clear(gll.COLOR_BUFFER_BIT)
 
 	app.UseProgram(app.slimeProg)
-	app.SetUniforms()
-	app.Uniform1i64ARB(2, app.worldSeed)
+	app.Uniform3f(app.uSlimeView, app.panX, app.panZ, app.zoom)
+	app.Uniform2i(app.uSlimeDim, app.w, app.h)
+	if app.useInt64 {
+		app.Uniform1i64ARB(app.uSlimeWorldSeed, app.worldSeed)
+	}
+	app.Uniform2ui(app.uSlimeWorldSeedV, uint32(app.worldSeed>>32), uint32(app.worldSeed))
 	app.DrawArrays(gll.TRIANGLES, 0, 3)
 
 	app.UseProgram(app.gridProg)
-	app.SetUniforms()
+	app.Uniform3f(app.uGridView, app.panX, app.panZ, app.zoom)
+	app.Uniform2i(app.uGridDim, app.w, app.h)
 	app.DrawArrays(gll.TRIANGLES, 0, 3)
 
 	if len(app.results) > 0 {
 		app.UseProgram(app.maskProg)
-		app.SetUniforms()
-		app.ActiveTexture(gll.TEXTURE0)
-		app.BindTexture(gll.TEXTURE_RECTANGLE, app.maskTex)
+		app.Uniform3f(app.uMaskView, app.panX, app.panZ, app.zoom)
+		app.Uniform2i(app.uMaskDim, app.w, app.h)
+
 		px := app.results[0].X - int32(app.maskDim.X/2)
 		pz := app.results[0].Z - int32(app.maskDim.Y/2)
-		app.Uniform2i(2, px, pz)
+		app.Uniform2i(app.uMaskOrigin, px, pz)
+
+		app.ActiveTexture(gll.TEXTURE0)
+		app.BindTexture(gll.TEXTURE_RECTANGLE, app.maskTex)
 		app.DrawArrays(gll.TRIANGLES, 0, 3)
 	}
 

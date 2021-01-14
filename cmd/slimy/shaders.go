@@ -3,7 +3,7 @@ package main
 import "github.com/vktec/slimy/gpu"
 
 const fsVert = `
-#version 330 core
+#version 420 core
 void main() {
 	float x = float((gl_VertexID & 1) << 2) - 1;
 	float y = float((gl_VertexID & 2) << 1) - 1;
@@ -12,25 +12,25 @@ void main() {
 `
 
 const slimeFrag = `
-#version 330 core
-#extension GL_ARB_gpu_shader_int64 : require
-layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
-layout(location = 1) uniform ivec2 dim; // dimensions of viewport
-layout(location = 2) uniform int64_t worldSeed;
+#version 420 core
+#extension GL_ARB_gpu_shader_int64 : enable
+
+uniform vec3 view; // xy is pan, z is zoom
+uniform ivec2 dim; // dimensions of viewport
 out vec4 color;
 ` + gpu.IsSlime + `
 void main() {
 ` + gpu.Coord + `
-	if (!isSlime(coord, worldSeed)) discard;
+	if (!isSlime(coord)) discard;
 	color = vec4(0.4, 1, 0.4, 1);
 }
 `
 
 const maskFrag = `
-#version 330 core
-layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
-layout(location = 1) uniform ivec2 dim; // dimensions of viewport
-layout(location = 2) uniform ivec2 origin;
+#version 420 core
+uniform vec3 view; // xy is pan, z is zoom
+uniform ivec2 dim; // dimensions of viewport
+uniform ivec2 origin;
 layout(binding = 0) uniform sampler2DRect mask;
 out vec4 color;
 void main() {
@@ -41,10 +41,9 @@ void main() {
 `
 
 const gridFrag = `
-#version 330 core
-#extension GL_ARB_gpu_shader_int64 : require
-layout(location = 0) uniform vec3 view; // xy is pan, z is zoom
-layout(location = 1) uniform ivec2 dim; // dimensions of viewport
+#version 420 core
+uniform vec3 view; // xy is pan, z is zoom
+uniform ivec2 dim; // dimensions of viewport
 out vec4 color;
 void main() {
 ` + gpu.Fcoord + `

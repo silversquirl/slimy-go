@@ -16,10 +16,13 @@ type Searcher struct {
 	ctx  glhl.Context
 	prog uint32
 
+	useInt64  bool
 	maskTex   uint32
 	maskDim   image.Point
 	countBuf  uint32
 	resultBuf uint32
+
+	uOffset, uThreshold, uWorldSeed, uWorldSeedV int32
 }
 
 func NewSearcher(mask image.Image) (*Searcher, error) {
@@ -29,10 +32,15 @@ func NewSearcher(mask image.Image) (*Searcher, error) {
 	s.activate()
 	s.DebugMessageCallback(gldebug.MessageCallback)
 
+	s.useInt64 = ExtensionSupported(s, "GL_ARB_gpu_shader_int64")
 	s.prog, err = BuildComputeShader(s, searchComp)
 	if err != nil {
 		return nil, err
 	}
+	s.uOffset = s.GetUniformLocation(s.prog, gll.Str("offset\000"))
+	s.uThreshold = s.GetUniformLocation(s.prog, gll.Str("threshold\000"))
+	s.uWorldSeed = s.GetUniformLocation(s.prog, gll.Str("worldSeed\000"))
+	s.uWorldSeedV = s.GetUniformLocation(s.prog, gll.Str("worldSeedV\000"))
 
 	s.maskDim = mask.Bounds().Canon().Size()
 	s.maskTex = UploadMask(s, mask)
@@ -77,9 +85,12 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 
 	s.activate()
 	s.UseProgram(s.prog)
-	s.Uniform2i(0, x0, z0)
-	s.Uniform1i64ARB(1, worldSeed)
-	s.Uniform1ui(2, uint32(threshold))
+	s.Uniform2i(s.uOffset, x0, z0)
+	s.Uniform1ui(s.uThreshold, uint32(threshold))
+	if s.useInt64 {
+		s.Uniform1i64ARB(s.uWorldSeed, worldSeed)
+	}
+	s.Uniform2ui(s.uWorldSeedV, uint32(worldSeed>>32), uint32(worldSeed))
 
 	s.ActiveTexture(gll.TEXTURE0)
 	s.BindTexture(gll.TEXTURE_RECTANGLE, s.maskTex)

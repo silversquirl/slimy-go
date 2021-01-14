@@ -50,3 +50,15 @@ func UploadMask(gl gll.GL330, img image.Image) (tex uint32) {
 	gl.BindTexture(gll.TEXTURE_RECTANGLE, 0)
 	return tex
 }
+
+func ExtensionSupported(gl gll.GL300, name string) bool {
+	var count int32
+	gl.GetIntegerv(gll.NUM_EXTENSIONS, &count)
+	for i := int32(0); i < count; i++ {
+		s := gl.GetStringi(gll.EXTENSIONS, uint32(i))
+		if gll.GoStr(s) == name {
+			return true
+		}
+	}
+	return false
+}
