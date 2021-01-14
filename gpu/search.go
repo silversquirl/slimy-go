@@ -13,10 +13,15 @@ import (
 
 type Searcher struct {
 	gll.GL430
-	ctx  glhl.Context
-	prog uint32
+
+	ctx interface {
+		MakeContextCurrent()
+		Destroy()
+	}
+	getProcAddr func(name string) unsafe.Pointer
 
 	useInt64  bool
+	prog      uint32
 	maskTex   uint32
 	maskDim   image.Point
 	countBuf  uint32
@@ -27,15 +32,35 @@ type Searcher struct {
 
 func NewSearcher(mask image.Image) (*Searcher, error) {
 	ctx, err := glhl.NewContext(4, 3, glhl.Core|glhl.Debug)
+	if err != nil {
+		return nil, err
+	}
+	s := &Searcher{ctx: ctx, getProcAddr: glhl.GetProcAddr}
+	return s, s.init(mask)
+}
 
-	s := &Searcher{ctx: ctx}
+func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
+	glfw.WindowHint(glfw.ContextVersionMajor, 4)
+	glfw.WindowHint(glfw.ContextVersionMinor, 3)
+	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
+	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	glfw.WindowHint(glfw.Visible, glfw.False)
+	win, err := glfw.CreateWindow(1, 1, "slimy search context", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	s := &Searcher{ctx: win, getProcAddr: glfw.GetProcAddress}
+	return s, s.init(mask)
+}
+
+func (s *Searcher) init(mask image.Image) (err error) {
 	s.activate()
 	s.DebugMessageCallback(gldebug.MessageCallback)
 
 	s.useInt64 = ExtensionSupported(s, "GL_ARB_gpu_shader_int64")
 	s.prog, err = BuildComputeShader(s, searchComp)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	s.uOffset = s.GetUniformLocation(s.prog, gll.Str("offset\000"))
 	s.uThreshold = s.GetUniformLocation(s.prog, gll.Str("threshold\000"))
@@ -52,7 +77,7 @@ func NewSearcher(mask image.Image) (*Searcher, error) {
 	s.BufferData(gll.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gll.DYNAMIC_COPY)
 	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, 0)
 
-	return s, nil
+	return nil
 }
 
 func (s *Searcher) Destroy() {
@@ -66,7 +91,7 @@ func (s *Searcher) Destroy() {
 
 func (s *Searcher) activate() {
 	s.ctx.MakeContextCurrent()
-	s.GL430 = gll.New430(glhl.GetProcAddr)
+	s.GL430 = gll.New430(s.getProcAddr)
 }
 
 // TODO: allow more than this arbitrary limit

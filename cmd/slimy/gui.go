@@ -66,7 +66,6 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 2)
-	glfw.WindowHint(glfw.ContextCreationAPI, glfw.EGLContextAPI)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
 	app.win, err = glfw.CreateWindow(800, 600, "Slimy", nil, nil)
@@ -120,7 +119,7 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	app.win.SetRefreshCallback(app.Refresh)
 	app.win.SetSizeCallback(app.Resize)
 
-	app.s, err = gpu.NewSearcher(maskImg)
+	app.s, err = gpu.NewGLFWSearcher(maskImg)
 	if err != nil {
 		return nil, err
 	}
