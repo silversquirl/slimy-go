@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/vktec/gldebug"
-	"github.com/vktec/glhl"
 	"github.com/vktec/gll"
 	"github.com/vktec/slimy"
 )
@@ -30,16 +29,10 @@ type Searcher struct {
 	uOffset, uThreshold, uWorldSeed, uWorldSeedV int32
 }
 
-func NewSearcher(mask image.Image) (*Searcher, error) {
-	ctx, err := glhl.NewContext(4, 3, glhl.Core|glhl.Debug)
-	if err != nil {
+func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
+	if err := glfw.Init(); err != nil {
 		return nil, err
 	}
-	s := &Searcher{ctx: ctx, getProcAddr: glhl.GetProcAddr}
-	return s, s.init(mask)
-}
-
-func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 3)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)

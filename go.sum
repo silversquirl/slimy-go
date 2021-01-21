@@ -4,7 +4,5 @@ github.com/vktec/gldebug v0.0.0-20210108052619-f46c51be2708 h1:vHymHs34q4yU1gDr0
 github.com/vktec/gldebug v0.0.0-20210108052619-f46c51be2708/go.mod h1:+RSRsi+7e+E6GwYJ0DpxblEnNrSa1v7v7KbO8GRyTk8=
 github.com/vktec/glhl v0.0.0-20210105224823-da197a287fde h1:TEPWPX2pmzJey3cTU3qOta0t7RQL4bXm5YOOxtUKFDo=
 github.com/vktec/glhl v0.0.0-20210105224823-da197a287fde/go.mod h1:a/o06yKoeH5vvnZAGGwW7nO5O9x2kUhbO7qyuc0xy1c=
-github.com/vktec/gll v0.0.0-20210114201806-869d3a5cf830 h1:ybInKfufY1eEWghU5yq2OQFuokrEgpHl3APFk8d8e3A=
-github.com/vktec/gll v0.0.0-20210114201806-869d3a5cf830/go.mod h1:EJnjBeNP+iObv6KoDSzpnmTosaOinHQJtP/e//CogAI=
-github.com/vktec/gll v0.0.0-20210114205111-548ae7054d98 h1:apng4RFyoDTOhsrdUEhx5sgcLpjNqL3ny7Hdtt43ARg=
-github.com/vktec/gll v0.0.0-20210114205111-548ae7054d98/go.mod h1:EJnjBeNP+iObv6KoDSzpnmTosaOinHQJtP/e//CogAI=
+github.com/vktec/gll v0.0.0-20210115000034-d6509ba05bcf h1:LqA44Qulv+AtnoL9JkYHCp9hL7teNcUwd847/Z+bSr0=
+github.com/vktec/gll v0.0.0-20210115000034-d6509ba05bcf/go.mod h1:EJnjBeNP+iObv6KoDSzpnmTosaOinHQJtP/e//CogAI=
