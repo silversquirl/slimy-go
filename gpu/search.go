@@ -1,6 +1,7 @@
 package gpu
 
 import (
+	"errors"
 	"image"
 	"unsafe"
 
@@ -34,7 +35,7 @@ func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
 		return nil, err
 	}
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
-	glfw.WindowHint(glfw.ContextVersionMinor, 3)
+	glfw.WindowHint(glfw.ContextVersionMinor, 2)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
 	glfw.WindowHint(glfw.Visible, glfw.False)
@@ -49,6 +50,13 @@ func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
 func (s *Searcher) init(mask image.Image) (err error) {
 	s.activate()
 	s.DebugMessageCallback(gldebug.MessageCallback)
+
+	if !ExtensionSupported(s, "GL_ARB_compute_shader") {
+		return errors.New("GL_ARB_compute_shader not supported - cannot use GPU search")
+	}
+	if !ExtensionSupported(s, "GL_ARB_compute_variable_group_size") {
+		return errors.New("GL_ARB_compute_variable_group_size not supported - cannot use GPU search")
+	}
 
 	s.useInt64 = ExtensionSupported(s, "GL_ARB_gpu_shader_int64")
 	s.prog, err = BuildComputeShader(s, searchComp)

@@ -1,7 +1,7 @@
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20201108214237-06ea97f0c265 h1:BcbKYUZo/TKPsiSh7LymK3p+TNAJJW3OfGO/21sBbiA=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20201108214237-06ea97f0c265/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
-github.com/vktec/gldebug v0.0.0-20210108052619-f46c51be2708 h1:vHymHs34q4yU1gDr0LbQIdFMDULsR2mBByqF8kGoEqg=
-github.com/vktec/gldebug v0.0.0-20210108052619-f46c51be2708/go.mod h1:+RSRsi+7e+E6GwYJ0DpxblEnNrSa1v7v7KbO8GRyTk8=
+github.com/vktec/gldebug v0.0.0-20210121173738-c8c0d4d4bf50 h1:neoTUFf1v4W7rElK4YP1RBFotZGF9VTyBsLFo+kgeng=
+github.com/vktec/gldebug v0.0.0-20210121173738-c8c0d4d4bf50/go.mod h1:+RSRsi+7e+E6GwYJ0DpxblEnNrSa1v7v7KbO8GRyTk8=
 github.com/vktec/glhl v0.0.0-20210105224823-da197a287fde h1:TEPWPX2pmzJey3cTU3qOta0t7RQL4bXm5YOOxtUKFDo=
 github.com/vktec/glhl v0.0.0-20210105224823-da197a287fde/go.mod h1:a/o06yKoeH5vvnZAGGwW7nO5O9x2kUhbO7qyuc0xy1c=
 github.com/vktec/gll v0.0.0-20210115000034-d6509ba05bcf h1:LqA44Qulv+AtnoL9JkYHCp9hL7teNcUwd847/Z+bSr0=

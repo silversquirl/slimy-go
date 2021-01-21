@@ -1,20 +1,24 @@
 package gpu
 
 const searchComp = `
-#version 430 core
+#version 420 core
+#line 6
+#extension GL_ARB_compute_shader : require
 #extension GL_ARB_gpu_shader_int64 : enable
 #extension GL_ARB_compute_variable_group_size : require // TODO: don't require
+#extension GL_ARB_shader_storage_buffer_object : require // TODO: don't require
 layout(local_size_variable) in;
 
 uniform ivec2 offset;
 uniform uint threshold;
 layout(binding = 0) uniform sampler2DRect mask;
 layout(binding = 0) uniform atomic_uint resultCount;
-layout(std430, binding = 1) buffer resultData {
-	uvec3 results[];
+layout(std140, binding = 1) buffer resultData {
+	uvec4 results[]; // We use a uvec4 rather than a uvec3 because some drivers do the padding bad
 };
 
 ` + IsSlime + `
+#line 21
 shared uint count;
 void main() {
 	if (gl_LocalInvocationIndex == 0) {
@@ -35,7 +39,7 @@ void main() {
 		if (count >= threshold) {
 			uint idx = atomicCounterIncrement(resultCount);
 			memoryBarrierAtomicCounter();
-			results[idx] = uvec3(gl_WorkGroupID.xy, count);
+			results[idx] = uvec4(gl_WorkGroupID.xy, count, 0);
 		}
 	}
 }
@@ -50,7 +54,7 @@ const Coord = Fcoord + `
 `
 
 const IsSlime = `
-#line 54
+#line 56
 #ifdef GL_ARB_gpu_shader_int64
 // int64 extension
 uniform int64_t worldSeed;
