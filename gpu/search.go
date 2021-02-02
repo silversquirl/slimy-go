@@ -49,7 +49,11 @@ func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
 		return nil, err
 	}
 	s := &Searcher{ctx: win, getProcAddr: glfw.GetProcAddress}
-	return s, s.init(mask)
+	if err := s.init(mask); err != nil {
+		s.Destroy()
+		return nil, err
+	}
+	return s, nil
 }
 
 func (s *Searcher) init(mask image.Image) (err error) {
@@ -75,7 +79,7 @@ func (s *Searcher) init(mask image.Image) (err error) {
 	s.GenBuffers(1, &s.countBuf)
 	s.GenBuffers(1, &s.resultBuf)
 	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, s.resultBuf)
-	s.BufferData(gll.SHADER_STORAGE_BUFFER, 3*4*maxResults, nil, gll.DYNAMIC_COPY)
+	s.BufferData(gll.SHADER_STORAGE_BUFFER, 3*4*resultBufferLength, nil, gll.DYNAMIC_COPY)
 	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, 0)
 
 	return nil
@@ -124,9 +128,10 @@ func (s *Searcher) initProg() (err error) {
 	return nil
 }
 
-// TODO: allow more than this arbitrary limit
-// >1mil results is probably fine for now tho, unless someone searches with stupidly relaxed requirements
-const maxResults = 1 << 20
+const (
+	searchRegionWidth  = 1024 // Partition the search into squares of this size
+	resultBufferLength = searchRegionWidth * searchRegionWidth
+)
 
 func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) []slimy.Result {
 	// TODO: search asynchronously or on a different thread so we don't block rendering
@@ -141,7 +146,6 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	s.activate()
 	s.initProg()
 	s.UseProgram(s.prog)
-	s.Uniform2i(s.uOffset, x0, z0)
 	s.Uniform1ui(s.uThreshold, uint32(threshold))
 	if s.useInt64 {
 		s.Uniform1i64ARB(s.uWorldSeed, worldSeed)
@@ -153,13 +157,66 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 
 	s.BindBuffer(gll.ATOMIC_COUNTER_BUFFER, s.countBuf)
 	defer s.BindBuffer(gll.ATOMIC_COUNTER_BUFFER, 0)
-	var resultCountVal uint32
-	s.BufferData(gll.ATOMIC_COUNTER_BUFFER, 4, gll.Ptr(&resultCountVal), gll.DYNAMIC_COPY)
 	s.BindBufferBase(gll.ATOMIC_COUNTER_BUFFER, 0, s.countBuf)
 
 	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, s.resultBuf)
 	defer s.BindBuffer(gll.SHADER_STORAGE_BUFFER, 0)
 	s.BindBufferBase(gll.SHADER_STORAGE_BUFFER, 1, s.resultBuf)
+
+	resultC := make(chan []slimy.Result)
+	returnC := make(chan []slimy.Result)
+	go func() {
+		var results []slimy.Result
+		for group := range resultC {
+			for _, res := range group {
+				i := len(results)
+				results = append(results, res)
+				// TODO: use a faster sorting alg
+				for i > 0 && res.OrderBefore(results[i-1]) {
+					results[i] = results[i-1]
+					i--
+				}
+				results[i] = res
+			}
+		}
+		returnC <- results
+	}()
+
+	rw, rh := (x1-x0)/searchRegionWidth, (z1-z0)/searchRegionWidth
+	for rz := int32(0); rz < rh; rz++ {
+		rz0 := z0 + rz*searchRegionWidth
+		rz1 := rz0 + searchRegionWidth
+		for rx := int32(0); rx < rw; rx++ {
+			rx0 := x0 + rx*searchRegionWidth
+			rx1 := rx0 + searchRegionWidth
+			resultC <- s.executeSearch(rx0, rz0, rx1, rz1)
+		}
+		if rw*searchRegionWidth < x1-x0 {
+			rx0 := x0 + rw*searchRegionWidth
+			resultC <- s.executeSearch(rx0, rz0, x1, rz1)
+		}
+	}
+	if rh*searchRegionWidth < z1-z0 {
+		rz0 := z0 + rh*searchRegionWidth
+		for rx := int32(0); rx < rw; rx++ {
+			rx0 := x0 + rx*searchRegionWidth
+			rx1 := rx0 + searchRegionWidth
+			resultC <- s.executeSearch(rx0, rz0, rx1, z1)
+		}
+		if rw*searchRegionWidth < x1-x0 {
+			rx0 := x0 + rw*searchRegionWidth
+			resultC <- s.executeSearch(rx0, rz0, x1, z1)
+		}
+	}
+
+	close(resultC)
+	return <-returnC
+}
+
+func (s *Searcher) executeSearch(x0, z0, x1, z1 int32) []slimy.Result {
+	s.Uniform2i(s.uOffset, x0, z0)
+	var resultCount uint32
+	s.BufferData(gll.ATOMIC_COUNTER_BUFFER, 4, gll.Ptr(&resultCount), gll.DYNAMIC_COPY)
 
 	// Execute shader
 	if s.useGroupSize {
@@ -170,27 +227,21 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	s.MemoryBarrier(gll.ATOMIC_COUNTER_BARRIER_BIT | gll.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results
-	s.GetBufferSubData(gll.ATOMIC_COUNTER_BUFFER, 0, 4, gll.Ptr(&resultCountVal))
-	if resultCountVal > 0 {
-		gpuResults := make([]gpuResult, resultCountVal)
+	s.GetBufferSubData(gll.ATOMIC_COUNTER_BUFFER, 0, 4, gll.Ptr(&resultCount))
+	if resultCount > 0 {
+		gpuResults := make([]gpuResult, resultCount)
+		// TODO: compare performance with using image load store and PBOs instead
 		s.GetBufferSubData(gll.SHADER_STORAGE_BUFFER, 0, len(gpuResults)*int(unsafe.Sizeof(gpuResults[0])), gll.Ptr(gpuResults))
 
-		results := make([]slimy.Result, len(gpuResults))
+		results := make([]slimy.Result, resultCount)
 		centerOffX, centerOffZ := int32(s.maskDim.X/2), int32(s.maskDim.Y/2)
 		for i, gpuRes := range gpuResults {
-			res := slimy.Result{
+			results[i] = slimy.Result{
 				x0 + int32(gpuRes.xoff) + centerOffX,
 				z0 + int32(gpuRes.zoff) + centerOffZ,
 				uint(gpuRes.count),
 			}
-			// TODO: use a faster sorting alg
-			for i > 0 && res.OrderBefore(results[i-1]) {
-				results[i] = results[i-1]
-				i--
-			}
-			results[i] = res
 		}
-
 		return results
 	} else {
 		return nil
