@@ -2,6 +2,7 @@ package gpu
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"unsafe"
 
@@ -20,7 +21,9 @@ type Searcher struct {
 	}
 	getProcAddr func(name string) unsafe.Pointer
 
-	useInt64  bool
+	useInt64     bool
+	useGroupSize bool
+
 	prog      uint32
 	maskTex   uint32
 	maskDim   image.Point
@@ -54,19 +57,12 @@ func (s *Searcher) init(mask image.Image) (err error) {
 	if !ExtensionSupported(s, "GL_ARB_compute_shader") {
 		return errors.New("GL_ARB_compute_shader not supported - cannot use GPU search")
 	}
-	if !ExtensionSupported(s, "GL_ARB_compute_variable_group_size") {
-		return errors.New("GL_ARB_compute_variable_group_size not supported - cannot use GPU search")
+	if !ExtensionSupported(s, "GL_ARB_shader_storage_buffer_object") {
+		return errors.New("GL_ARB_shader_storage_buffer_object not supported - cannot use GPU search")
 	}
 
 	s.useInt64 = ExtensionSupported(s, "GL_ARB_gpu_shader_int64")
-	s.prog, err = BuildComputeShader(s, searchComp)
-	if err != nil {
-		return err
-	}
-	s.uOffset = s.GetUniformLocation(s.prog, gll.Str("offset\000"))
-	s.uThreshold = s.GetUniformLocation(s.prog, gll.Str("threshold\000"))
-	s.uWorldSeed = s.GetUniformLocation(s.prog, gll.Str("worldSeed\000"))
-	s.uWorldSeedV = s.GetUniformLocation(s.prog, gll.Str("worldSeedV\000"))
+	s.useGroupSize = ExtensionSupported(s, "GL_ARB_compute_variable_group_size")
 
 	s.maskDim = mask.Bounds().Canon().Size()
 	s.maskTex = UploadMask(s, mask)
@@ -82,7 +78,9 @@ func (s *Searcher) init(mask image.Image) (err error) {
 }
 
 func (s *Searcher) Destroy() {
-	s.DeleteProgram(s.prog)
+	if s.prog != 0 {
+		s.DeleteProgram(s.prog)
+	}
 	s.DeleteTextures(1, &s.maskTex)
 	s.DeleteBuffers(1, &s.countBuf)
 	s.DeleteBuffers(1, &s.resultBuf)
@@ -93,6 +91,33 @@ func (s *Searcher) Destroy() {
 func (s *Searcher) activate() {
 	s.ctx.MakeContextCurrent()
 	s.GL430 = gll.New430(s.getProcAddr)
+}
+
+func (s *Searcher) initProg() (err error) {
+	var prelude string
+	if s.useGroupSize {
+		if s.prog != 0 {
+			return nil
+		}
+		prelude = searchPreludeVariable
+	} else {
+		if s.prog != 0 {
+			s.DeleteProgram(s.prog)
+		}
+		prelude = fmt.Sprintf(searchPreludeFixed, s.maskDim.X, s.maskDim.Y)
+	}
+
+	s.prog, err = BuildComputeShader(s, prelude, searchComp)
+	if err != nil {
+		return err
+	}
+
+	s.uOffset = s.GetUniformLocation(s.prog, gll.Str("offset\000"))
+	s.uThreshold = s.GetUniformLocation(s.prog, gll.Str("threshold\000"))
+	s.uWorldSeed = s.GetUniformLocation(s.prog, gll.Str("worldSeed\000"))
+	s.uWorldSeedV = s.GetUniformLocation(s.prog, gll.Str("worldSeedV\000"))
+
+	return nil
 }
 
 // TODO: allow more than this arbitrary limit
@@ -110,6 +135,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	z1 -= int32(s.maskDim.Y / 2)
 
 	s.activate()
+	s.initProg()
 	s.UseProgram(s.prog)
 	s.Uniform2i(s.uOffset, x0, z0)
 	s.Uniform1ui(s.uThreshold, uint32(threshold))
@@ -132,7 +158,11 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	s.BindBufferBase(gll.SHADER_STORAGE_BUFFER, 1, s.resultBuf)
 
 	// Execute shader
-	s.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.maskDim.X), uint32(s.maskDim.Y), 1)
+	if s.useGroupSize {
+		s.DispatchComputeGroupSizeARB(uint32(x1-x0), uint32(z1-z0), 1, uint32(s.maskDim.X), uint32(s.maskDim.Y), 1)
+	} else {
+		s.DispatchCompute(uint32(x1-x0), uint32(z1-z0), 1)
+	}
 	s.MemoryBarrier(gll.ATOMIC_COUNTER_BARRIER_BIT | gll.SHADER_STORAGE_BARRIER_BIT)
 
 	// Load results

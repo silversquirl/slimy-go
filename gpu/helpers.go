@@ -18,8 +18,8 @@ func BuildShader(gl gll.GL330, vert, frag string) (prog uint32, err error) {
 	}
 	return glh.NewProgram(gl, vshad, fshad)
 }
-func BuildComputeShader(gl gll.GL430, source string) (prog uint32, err error) {
-	shad, err := glh.NewShader(gl, gll.COMPUTE_SHADER, source)
+func BuildComputeShader(gl gll.GL420, source ...string) (prog uint32, err error) {
+	shad, err := glh.NewShader(gl, gll.COMPUTE_SHADER, source...)
 	if err != nil {
 		return 0, err
 	}

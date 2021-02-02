@@ -1,14 +1,23 @@
 package gpu
 
-const searchComp = `
+const searchPreludeVariable = `
 #version 420 core
-#line 6
 #extension GL_ARB_compute_shader : require
 #extension GL_ARB_gpu_shader_int64 : enable
-#extension GL_ARB_compute_variable_group_size : require // TODO: don't require
+#extension GL_ARB_compute_variable_group_size : require
 #extension GL_ARB_shader_storage_buffer_object : require // TODO: don't require
 layout(local_size_variable) in;
+`
 
+const searchPreludeFixed = `
+#version 420 core
+#extension GL_ARB_compute_shader : require
+#extension GL_ARB_gpu_shader_int64 : enable
+#extension GL_ARB_shader_storage_buffer_object : require // TODO: don't require
+layout(local_size_x = %d, local_size_y = %d) in;
+`
+
+const searchComp = `
 uniform ivec2 offset;
 uniform uint threshold;
 layout(binding = 0) uniform sampler2DRect mask;
