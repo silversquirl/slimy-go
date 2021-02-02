@@ -67,14 +67,18 @@ func NewApp(worldSeed int64, threshold int, centerPos [2]int, maskImg image.Imag
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 2)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
-	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	if gpu.Debug {
+		glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	}
 	app.win, err = glfw.CreateWindow(800, 600, "Slimy", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	app.activate()
-	app.DebugMessageCallbackARB(gldebug.MessageCallback)
+	if gpu.Debug {
+		app.DebugMessageCallbackARB(gldebug.MessageCallback)
+	}
 	app.ClearColor(0.1, 0.1, 0.1, 1.0)
 	app.Enable(gll.BLEND)
 	app.BlendFunc(gll.SRC_ALPHA, gll.ONE_MINUS_SRC_ALPHA)

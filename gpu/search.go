@@ -40,7 +40,9 @@ func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 2)
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
-	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	if Debug {
+		glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	}
 	glfw.WindowHint(glfw.Visible, glfw.False)
 	win, err := glfw.CreateWindow(1, 1, "slimy search context", nil, nil)
 	if err != nil {
@@ -52,7 +54,9 @@ func NewGLFWSearcher(mask image.Image) (*Searcher, error) {
 
 func (s *Searcher) init(mask image.Image) (err error) {
 	s.activate()
-	s.DebugMessageCallback(gldebug.MessageCallback)
+	if Debug {
+		s.DebugMessageCallback(gldebug.MessageCallback)
+	}
 
 	if !ExtensionSupported(s, "GL_ARB_compute_shader") {
 		return errors.New("GL_ARB_compute_shader not supported - cannot use GPU search")

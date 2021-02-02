@@ -7,7 +7,11 @@ import (
 )
 
 func NewSearcher(mask image.Image) (*Searcher, error) {
-	ctx, err := glhl.NewContext(4, 2, glhl.Core|glhl.Debug)
+	flags := glhl.Core
+	if Debug {
+		flags |= glhl.Debug
+	}
+	ctx, err := glhl.NewContext(4, 2, flags)
 	if err != nil {
 		return NewGLFWSearcher(mask)
 	}
