@@ -6,7 +6,7 @@ It can search on either the CPU or the GPU, and makes use of multithreading to s
 ## Installation
 
 Slimy is still in development, so there are no releases currently.
-However, it is very easy to install Slimy from source code: simply install [Go], then run `go install github.com/vktec/slimy/cmd/slimy`
+However, it is very easy to install Slimy from source code: simply install [Go], then run `go get github.com/vktec/slimy/cmd/slimy`
 
 [Go]: https://golang.org/
 
