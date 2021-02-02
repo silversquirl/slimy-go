@@ -13,4 +13,5 @@ However, it is very easy to install Slimy from source code: simply install [Go],
 ## System requirements
 
 Requirements for CPU search are minimal, though performance will suffer on less powerful CPUs.
-GPU search requires support for OpenGL 4.3 or greater, with the `GL_ARB_gpu_shader_int64` and `GL_ARB_compute_variable_group_size` extensions.
+GPU search requires support for OpenGL 4.2 or greater, with the `GL_ARB_compute_shader` and `GL_ARB_shader_storage_buffer_object` extensions.
+For reference, most integrated GPUs since 2013 (or 2012 on Linux) will support these features.
