@@ -1,13 +1,17 @@
 # slimy
 
+[![Discord](https://img.shields.io/badge/chat%20on-discord-7289DA?logo=discord)](https://discord.gg/zEnfMVJqe6)
+
 Slimy is a tool to find slime chunk clusters in Minecraft seeds.
 It can search on either the CPU or the GPU, and makes use of multithreading to speed up the CPU search.
 
 ## Installation
 
-Slimy is still in development, so there are no releases currently.
-However, it is very easy to install Slimy from source code: simply install [Go], then run `go get github.com/vktec/slimy/cmd/slimy`
+Slimy is still in development and there are no full releases yet, however you can download the builds of the latest commit for [Linux] or [Windows].
+Alternatively, it is quite easy to install Slimy from source code: install [Go], GLFW and a C compiler, then run `go get github.com/vktec/slimy/cmd/slimy`.
 
+[Linux]: https://ci.vktec.org.uk/slimy/main/files/slimy-linux-amd64
+[Windows]: https://ci.vktec.org.uk/slimy/main/files/slimy-windows-amd64.exe
 [Go]: https://golang.org/
 
 ## System requirements
