@@ -180,11 +180,6 @@ func main() {
 			os.Exit(2)
 		}
 		threshold := int(threshold64)
-		// TODO: use negative threshold for max count
-		if threshold < 0 {
-			fmt.Fprintln(os.Stderr, "Threshold must not be negative")
-			os.Exit(2)
-		}
 
 		runSearch(searcher,
 			int32(centerPos[0])-searchRange, int32(centerPos[1])-searchRange,

@@ -146,7 +146,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 	s.activate()
 	s.initProg()
 	s.UseProgram(s.prog)
-	s.Uniform1ui(s.uThreshold, uint32(threshold))
+	s.Uniform1i(s.uThreshold, int32(threshold))
 	if s.useInt64 {
 		s.Uniform1i64ARB(s.uWorldSeed, worldSeed)
 	}
@@ -172,7 +172,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 				i := len(results)
 				results = append(results, res)
 				// TODO: use a faster sorting alg
-				for i > 0 && res.OrderBefore(results[i-1]) {
+				for i > 0 && res.OrderBefore(results[i-1], threshold) {
 					results[i] = results[i-1]
 					i--
 				}

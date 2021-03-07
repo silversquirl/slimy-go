@@ -50,7 +50,7 @@ func (s *Searcher) Search(x0, z0, x1, z1 int32, threshold int, worldSeed int64) 
 		results = append(results, sectionResults...)
 		for i := start; i < len(results); i++ {
 			for j := i; j > 0; j-- {
-				if results[j].OrderBefore(results[j-1]) {
+				if results[j].OrderBefore(results[j-1], threshold) {
 					results[j-1], results[j] = results[j], results[j-1]
 				} else {
 					break
@@ -127,12 +127,19 @@ func (sec *Section) Search(mask Mask, threshold int) (results []slimy.Result) {
 			// TODO: avoid checking the full mask area every time
 			//       This can be done by adding the new and subtracting the old chunks
 			count := sec.CheckMask(x, z, mask)
-			if int(count) >= threshold {
+			if checkThreshold(threshold, int(count)) {
 				results = append(results, slimy.Result{x + offX, z + offZ, count})
 			}
 		}
 	}
 	return results
+}
+func checkThreshold(threshold, count int) bool {
+	if threshold < 0 {
+		return int(count) <= -threshold
+	} else {
+		return int(count) >= threshold
+	}
 }
 
 func (sec *Section) CheckMask(x0, z0 int32, mask Mask) (count uint) {

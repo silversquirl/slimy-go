@@ -5,10 +5,14 @@ type Result struct {
 	Count uint
 }
 
-func (a Result) OrderBefore(b Result) bool {
+func (a Result) OrderBefore(b Result, direction int) bool {
 	// Sort by count
 	if a.Count != b.Count {
-		return a.Count > b.Count
+		if direction >= 0 {
+			return a.Count > b.Count
+		} else {
+			return a.Count < b.Count
+		}
 	}
 
 	// Then by distance from 0,0

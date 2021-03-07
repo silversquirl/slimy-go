@@ -19,7 +19,7 @@ layout(local_size_x = %d, local_size_y = %d) in;
 
 const searchComp = `
 uniform ivec2 offset;
-uniform uint threshold;
+uniform int threshold;
 layout(binding = 0) uniform sampler2DRect mask;
 layout(binding = 0) uniform atomic_uint resultCount;
 layout(std140, binding = 1) buffer resultData {
@@ -28,7 +28,14 @@ layout(std140, binding = 1) buffer resultData {
 
 ` + IsSlime + `
 #line 21
-shared uint count;
+shared int count;
+bool checkThreshold(int threshold, int count) {
+	if (threshold < 0) {
+		return count <= -threshold;
+	} else {
+		return count >= threshold;
+	}
+}
 void main() {
 	if (gl_LocalInvocationIndex == 0) {
 		count = 0;
@@ -40,15 +47,15 @@ void main() {
 	bool slime = isSlime(coord);
 	bool mask = texelFetch(mask, ivec2(gl_LocalInvocationID.xy)).r >= 0.5;
 
-	atomicAdd(count, uint(slime) * uint(mask));
+	atomicAdd(count, int(slime) * int(mask));
 	memoryBarrierShared();
 	barrier();
 
 	if (gl_LocalInvocationIndex == 0) {
-		if (count >= threshold) {
+		if (checkThreshold(threshold, count)) {
 			uint idx = atomicCounterIncrement(resultCount);
 			memoryBarrierAtomicCounter();
-			results[idx] = uvec4(gl_WorkGroupID.xy, count, 0);
+			results[idx] = ivec4(gl_WorkGroupID.xy, count, 0);
 		}
 	}
 }
