@@ -79,7 +79,7 @@ func (s *Searcher) init(mask image.Image) (err error) {
 	s.GenBuffers(1, &s.countBuf)
 	s.GenBuffers(1, &s.resultBuf)
 	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, s.resultBuf)
-	s.BufferData(gll.SHADER_STORAGE_BUFFER, 3*4*resultBufferLength, nil, gll.DYNAMIC_COPY)
+	s.BufferData(gll.SHADER_STORAGE_BUFFER, 4*4*resultBufferLength, nil, gll.DYNAMIC_COPY)
 	s.BindBuffer(gll.SHADER_STORAGE_BUFFER, 0)
 
 	return nil
