@@ -202,11 +202,6 @@ func main() {
 			os.Exit(2)
 		}
 		threshold := int(threshold64)
-		// TODO: use negative threshold for max count
-		if threshold < 0 {
-			fmt.Fprintln(os.Stderr, "Threshold must not be negative")
-			os.Exit(2)
-		}
 
 		app, err := NewApp(seed, threshold, centerPos, maskImg, *vsync)
 		if err != nil {
